@@ -1,0 +1,24 @@
+services:
+  db:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ragdb}
+      MYSQL_USER: ${MYSQL_USER:-rag}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-rag}
+    ports:
+      - "${MYSQL_PORT:-3366}:3306"
+    volumes:
+      - rag_data:/var/lib/mysql
+    networks:
+      - rag-network
+
+networks:
+  rag-network:
+    driver: bridge
+volumes:
+  rag_data:
+    
