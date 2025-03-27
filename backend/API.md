@@ -4,27 +4,6 @@
 
 **- All the api will have a prefix /api - http://localhost:8000/api**
 
-
-**- Api response**
-
-Check the `app/core/api_reponse.py` file.
-
-Example usage:
-
-```python
-from app.core.api_reponse import api_response
-
-@app.get("/")
-async def root():
-    return api_response(
-        data = {
-            "message": "Welcome to the FastAPI application!"
-        },
-        message = "Root endpoint"
-    )
-
-```
-
 **- Exception handler**
 
 Example usage:
@@ -47,17 +26,25 @@ curl -X GET "http://localhost:8000/api/health"
 
 API prefix: `auth`
 
-1. Login 
+1. Login
 
 `/auth/login`
 
 ```bash
-curl -X POST "http://localhost:8000/api/auth/login" \
--H "Content-Type: application/json" \
--d '{
-  "username": "your_username",
-  "password": "your_password"
-}'
+  curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "test"
+  }'
+```
+
+Response:
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZXhwIjoxNzQ1NjgwMTM4fQ.sVlSs38POa9XYTh4V2BxpyT_spXQ_-xrsxaqeEPXhfk"
+}
 ```
 
 2. Register
@@ -65,11 +52,25 @@ curl -X POST "http://localhost:8000/api/auth/login" \
 `/auth/register`
 
 ```bash
-curl -X POST "http://localhost:8000/api/auth/register" \
--H "Content-Type: application/json" \
--d '{
-  "username": "new_user",
-  "email": "new_user@example.com",
-  "password": "secure_password"
-}'
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "username": "test",
+    "password": "test"
+  }'
+```
+
+Response:
+
+```json
+{
+  "email": "test@example.com",
+  "username": "test",
+  "is_active": true,
+  "is_superuser": false,
+  "id": 2,
+  "created_at": "2025-03-27T07:47:00",
+  "updated_at": "2025-03-27T07:47:00"
+}
 ```

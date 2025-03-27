@@ -1,25 +1,40 @@
 from functools import wraps
 
-class Guard:
+from fastapi import Depends
+from httpx import get
+from sqlalchemy.orm import Session 
 
-    def is_super_user(self, user) -> bool:
-        return user.is_superuser
+from app.models.models import Permission, ProjectPermission
+from db.database import get_db_session
 
-    def check_superuser(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            user = kwargs.get('user') or args[1]  # Get user from args
-            if self.is_super_user(user):
-                return True  # Full permission for superuser
-            return func(self, *args, **kwargs)
-        return wrapper
+class PermissionService:
+    def __init__(self, db: Session):
+        self.db = db
 
-    @check_superuser
-    def canAddDocument(self, add_document_permission: str, user, project_id: str) -> bool:
+    def getUserScopes(self, user_id: int = None):
+        # This function creates a scope for the permission check
+        # You can customize this function to create the scope you need
 
-        # Check if the user has add_document_permission under the project_id
-        return 1
-    
-    @check_superuser
-    def canEditDocument(self, edit_document_permission: str, user, project_id: str) -> bool:
-        return 1
+        permissions = self.db.query(
+            ProjectPermission.project_id,
+            ProjectPermission.user_id,
+            Permission.name.label('permission_name'),
+            Permission.description,
+            Permission.is_system_level
+        ).join(
+            Permission, 
+            ProjectPermission.permission_id == Permission.id
+        ).filter(
+            ProjectPermission.user_id == user_id
+        ).all()
+
+        scopes = []
+
+        for permi in permissions:
+            scopes.append(f"{permi.project_id}:{permi.permission_name}")
+
+
+        return scopes
+
+def getPermissionService(db: Session = Depends(get_db_session)):
+    return PermissionService(db)

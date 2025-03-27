@@ -22,7 +22,7 @@ def upgrade():
         'users',
         sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
         sa.Column('email', sa.String(255), nullable=False, unique=True),
-        sa.Column('username', sa.String(255), nullable=False, unique=True),
+        sa.Column('username', sa.String(255), nullable=False),
         sa.Column('hashed_password', sa.String(255), nullable=False),
         sa.Column('is_active', sa.Boolean, default=False),
         sa.Column('is_superuser', sa.Boolean, default=False),

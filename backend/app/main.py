@@ -1,9 +1,13 @@
 from fastapi import APIRouter, FastAPI
+import sqlalchemy
 from app.core.api_reponse import api_response
 from app.core.exception_handler import register_error_handlers
 from app.api.api import main_router
+from app.config.config import config
+import os
 
 app = FastAPI()
+db = sqlalchemy
 
 register_error_handlers(app)
 
