@@ -1,3 +1,8 @@
+## Stack
+
+- FastAPI
+- MySQL
+
 ## Setup
 
 **1. Make sure you are in the ./backend directory**
@@ -25,6 +30,11 @@ pip install -r requirements.txt
 alembic upgrade head  
 ```
 
+**4. Run the app**
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
 
 
