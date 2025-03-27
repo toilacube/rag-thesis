@@ -1,7 +1,7 @@
 from os import access
 from pydantic import BaseModel
 
-class LoginResonse(BaseModel):
+class LoginResponse(BaseModel):
     access_token: str
 
 class LoginRequest(BaseModel):

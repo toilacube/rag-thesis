@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from sqlalchemy.orm import Session 
 
-from app.dtos.authDTO import LoginResonse, LoginRequest
+from app.dtos.authDTO import LoginResponse, LoginRequest
 from app.services.permission import PermissionService, getPermissionService
 from db.database import get_db_session
 from app.core import security
@@ -16,7 +16,7 @@ from app.models.models import User
 
 router = APIRouter()
 
-@router.post("/login", response_model=LoginResonse)
+@router.post("/login", response_model=LoginResponse)
 async def login(*, db: Session = Depends(get_db_session), permissionService: PermissionService = Depends(getPermissionService), login: LoginRequest):
     # Check if the user exists
     user = db.query(User).filter(User.email == login.email).first()
