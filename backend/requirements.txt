@@ -21,6 +21,7 @@ markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 mdurl==0.1.2
 mysql-connector-python==9.2.0
+psycopg==3.2.6 
 pydantic==2.10.6
 pydantic_core==2.27.2
 Pygments==2.19.1

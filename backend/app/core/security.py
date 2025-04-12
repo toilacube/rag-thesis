@@ -9,15 +9,16 @@ def create_hashed_password(password: str):
     """
     Hash a password using bcrypt
     """
+    '''
+ Postgres as my DDBB and his driver, or the DDBB system, encode always an already encoded string
+ '''
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8') # decode the hash to prevent is encoded twice
 
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
 def createAccessToken(data: dict, expires_delta: int = None):
     """
     Create a JWT token
     """
-    
-
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now() + timedelta(minutes=expires_delta)

@@ -1,28 +1,14 @@
 services:
   db:
-    image: mysql:8.0
-    command: --default-authentication-plugin=mysql_native_password
-    env_file:
-      - .env
+    image: postgres:15
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-ragdb}
-      MYSQL_USER: ${MYSQL_USER:-rag}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-rag}
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag}
+      POSTGRES_DB: ${POSTGRES_DB:-ragdb}
     ports:
-      - "${MYSQL_PORT:-3366}:3306"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - rag_data:/var/lib/mysql
-    networks:
-      - rag-network
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    environment:
-      PMA_HOST: db
-      PMA_PORT: 3306
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-    ports:
-      - "8080:80"
+      - rag_data:/var/lib/postgresql/data
     networks:
       - rag-network
 

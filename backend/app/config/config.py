@@ -14,28 +14,23 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/tmp/uploads")
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB max upload
-    SECRET_KEY = os.environ.get("SECRET_KEY")
-    
-    MYSQL_HOST = os.environ.get("MYSQL_HOST", "localhost")
-    MYSQL_PORT = os.environ.get("MYSQL_PORT", 3306)
-    MYSQL_USER = os.environ.get("MYSQL_USER", "user")
-    MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "password")
-    MYSQL_DB = os.environ.get("MYSQL_DB", "app_db")
+
+    POSTGRES_HOST = os.environ.get("POSTGRES_SERVER", "localhost")
+    POSTGRES_PORT = os.environ.get("POSTGRES_PORT", 5432)
+    POSTGRES_USER = os.environ.get("POSTGRES_USER", "user")
+    POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "password")
+    POSTGRES_DB = os.environ.get("POSTGRES_DB", "app_db")
+
+    SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL", "mysql+aiomysql://user:password@localhost/app_dev"
-    )
 
 class TestingConfig(Config):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "TEST_DATABASE_URL", "mysql+pymysql://user:password@localhost/app_test"
-    )
     
 class ProductionConfig(Config):
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
+    pass
     
 config = {
     "development": DevelopmentConfig,

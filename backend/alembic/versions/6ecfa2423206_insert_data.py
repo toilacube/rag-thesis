@@ -20,9 +20,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade():
+    # Define the current timestamp
+    now = datetime.now()
+
     # Create a connection to execute SQL
     conn = op.get_bind()
-    
+
     # Check if user with ID 1 exists
     result = conn.execute(sa.text("SELECT id FROM users WHERE id = 1")).fetchone()
     if not result:
@@ -40,7 +43,10 @@ def upgrade():
             }
         )
         print("Created admin user with ID 1")
-    
+
+        # Reset the sequence for the 'id' column in the 'users' table
+        conn.execute(sa.text("SELECT setval(pg_get_serial_sequence('users', 'id'), MAX(id)) FROM users"))
+
     # Insert permissions
     permissions = [
         ('view_project', 'Can view project details and content', False),
@@ -52,13 +58,13 @@ def upgrade():
         ('manage_api_keys', 'Can create and manage API keys for the project', False),
         ('admin', 'Has all permissions for the project', True),
     ]
-    
+
     for name, description, is_system_level in permissions:
         conn.execute(
             sa.text("""
             INSERT INTO permissions (name, description, is_system_level, created_at, updated_at) 
-            SELECT :name, :description, :is_system_level, NOW(), NOW()
-            WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE name = :name)
+            SELECT CAST(:name AS VARCHAR), CAST(:description AS TEXT), CAST(:is_system_level AS BOOLEAN), NOW(), NOW()
+            WHERE NOT EXISTS (SELECT 1 FROM permissions WHERE name = CAST(:name AS VARCHAR))
             """),
             {
                 "name": name,
@@ -74,13 +80,13 @@ def upgrade():
         ('Internal Documentation', 'Company policies and procedures', now, now),
         ('Product Documentation', 'User manuals and technical specifications', now, now),
     ]
-    
+
     for name, description, created_at, updated_at in projects:
         conn.execute(
             sa.text("""
             INSERT INTO projects (project_name, description, created_at, updated_at)
-            SELECT :name, :description, :created_at, :updated_at
-            WHERE NOT EXISTS (SELECT 1 FROM projects WHERE project_name = :name)
+            SELECT CAST(:name AS VARCHAR), CAST(:description AS TEXT), :created_at, :updated_at
+            WHERE NOT EXISTS (SELECT 1 FROM projects WHERE project_name = CAST(:name AS VARCHAR))
             """),
             {
                 "name": name,

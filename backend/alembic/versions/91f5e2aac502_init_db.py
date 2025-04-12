@@ -26,8 +26,8 @@ def upgrade():
         sa.Column('hashed_password', sa.String(255), nullable=False),
         sa.Column('is_active', sa.Boolean, default=False),
         sa.Column('is_superuser', sa.Boolean, default=False),
-        sa.Column('created_at', sa.DateTime, nullable=False),
-        sa.Column('updated_at', sa.DateTime, nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False),
     )
 
     # Projects table
@@ -36,8 +36,8 @@ def upgrade():
         sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
         sa.Column('project_name', sa.String(255), nullable=False),
         sa.Column('description', sa.Text),
-        sa.Column('created_at', sa.DateTime, nullable=False),
-        sa.Column('updated_at', sa.DateTime, nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False),
     )
 
     # API Keys table
@@ -48,8 +48,8 @@ def upgrade():
         sa.Column('name', sa.String(255), nullable=False),
         sa.Column('project_id', sa.Integer, sa.ForeignKey('projects.id'), nullable=False),
         sa.Column('is_active', sa.Boolean, nullable=False),
-        sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp()),
-        sa.Column('updated_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp()),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
     )
 
     # Chats table
@@ -58,8 +58,8 @@ def upgrade():
         sa.Column('id', sa.Integer, primary_key=True, autoincrement=True),
         sa.Column('title', sa.String(255), nullable=False),
         sa.Column('user_id', sa.Integer, sa.ForeignKey('users.id'), nullable=False),
-        sa.Column('created_at', sa.DateTime, nullable=False),
-        sa.Column('updated_at', sa.DateTime, nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False),
     )
 
     # Messages table
@@ -69,8 +69,8 @@ def upgrade():
         sa.Column('chat_id', sa.Integer, sa.ForeignKey('chats.id'), nullable=False),
         sa.Column('role', sa.String(50), nullable=False),
         sa.Column('content', sa.Text, nullable=False),
-        sa.Column('created_at', sa.DateTime, nullable=False),
-        sa.Column('updated_at', sa.DateTime, nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False),
     )
 
     # Chat-Project association table
@@ -106,8 +106,8 @@ def upgrade():
         sa.Column('content_type', sa.String(100)),
         sa.Column('file_hash', sa.String(64)),
         sa.Column('project_id', sa.Integer, sa.ForeignKey('projects.id'), nullable=False),
-        sa.Column('created_at', sa.DateTime, nullable=False),
-        sa.Column('updated_at', sa.DateTime, nullable=False),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False),
         sa.Column('uploaded_by', sa.Integer, sa.ForeignKey('users.id'), nullable=False),
         sa.UniqueConstraint('project_id', 'file_name', name='uq_kb_file_name'),
     )
@@ -120,8 +120,8 @@ def upgrade():
         sa.Column('document_id', sa.Integer, sa.ForeignKey('documents.id')),
         sa.Column('status', sa.String(50)),
         sa.Column('error_message', sa.Text),
-        sa.Column('created_at', sa.DateTime),
-        sa.Column('updated_at', sa.DateTime),
+        sa.Column('created_at', sa.TIMESTAMP),
+        sa.Column('updated_at', sa.TIMESTAMP),
         sa.Column('document_upload_id', sa.Integer, sa.ForeignKey('document_uploads.id')),
         sa.Column('initiated_by', sa.Integer, sa.ForeignKey('users.id')),
     )
@@ -133,8 +133,8 @@ def upgrade():
         sa.Column('project_id', sa.Integer, sa.ForeignKey('projects.id'), nullable=False),
         sa.Column('file_name', sa.String(255), nullable=False),
         sa.Column('hash', sa.String(64), nullable=False),
-        sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp()),
-        sa.Column('updated_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp()),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
         sa.Column('document_id', sa.Integer, sa.ForeignKey('documents.id'), nullable=False),
         sa.Column('chunk_metadata', sa.JSON),
     )
@@ -146,8 +146,8 @@ def upgrade():
         sa.Column('name', sa.String(50), nullable=False, unique=True),
         sa.Column('description', sa.Text),
         sa.Column('is_system_level', sa.Boolean, nullable=False, server_default=sa.text('FALSE')),
-        sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp()),
-        sa.Column('updated_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp()),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
     )
 
     # Project Permissions table
@@ -158,8 +158,8 @@ def upgrade():
         sa.Column('user_id', sa.Integer, sa.ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
         sa.Column('permission_id', sa.Integer, sa.ForeignKey('permissions.id', ondelete='CASCADE'), nullable=False),
         sa.Column('granted_by', sa.Integer, sa.ForeignKey('users.id')),
-        sa.Column('created_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp()),
-        sa.Column('updated_at', sa.DateTime, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
+        sa.Column('created_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp()),
+        sa.Column('updated_at', sa.TIMESTAMP, nullable=False, server_default=sa.func.current_timestamp(), onupdate=sa.func.current_timestamp()),
         sa.UniqueConstraint('project_id', 'user_id', 'permission_id', name='uq_project_user_permission'),
     )
 

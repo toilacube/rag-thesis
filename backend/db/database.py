@@ -9,7 +9,7 @@ from app.config.config import getConfig
 load_dotenv()
 
 # Database Configuration
-DATABASE_URL = getConfig().SQLALCHEMY_DATABASE_URI
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://rag:rag@localhost:5432/ragdb")
 
 # SQLAlchemy Base Model
 Base = declarative_base()

@@ -6,6 +6,7 @@
 ## Setup
 
 **1. Make sure you are in the ./backend directory**
+
 ```bash
 cd backend/
 ```
@@ -24,22 +25,29 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**3. Database migration**
+**3. Database setup using Docker**
+
+1. Ensure Docker is installed and running on your system.
+2. Start the database service using the `docker-compose.yml` file:
+   ```bash
+   docker-compose up -d db
+   ```
+3. Verify that the database is running:
+   ```bash
+   docker ps
+   ```
+
+**4. Database migration**
 
 ```bash
-alembic upgrade head  
+alembic upgrade head
 ```
 
-**4. Run the app**
+**5. Run the app**
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-
-
-
-
-
 
 ## Typical workflow of RAG
 
