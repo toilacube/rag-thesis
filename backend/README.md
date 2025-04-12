@@ -49,6 +49,16 @@ alembic upgrade head
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+**6. Run Tests**
+
+To run the tests, use the following command:
+
+```bash
+pytest tests/
+```
+
+This will execute all the test cases in the `tests/` directory and provide a summary of the results.
+
 ## Typical workflow of RAG
 
 1. User input question.
