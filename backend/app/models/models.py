@@ -16,8 +16,8 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
     chats = relationship("Chat", back_populates="user")
     documents = relationship("Document", back_populates="uploaded_by_user")
@@ -31,8 +31,8 @@ class Project(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     project_name = Column(String(255), nullable=False)
     description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
     api_keys = relationship("ApiKey", back_populates="project")
     chat_projects = relationship("ChatProject", back_populates="project")
@@ -51,8 +51,8 @@ class ApiKey(Base):
     name = Column(String(255), nullable=False)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     is_active = Column(Boolean, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
     project = relationship("Project", back_populates="api_keys")
 
@@ -63,8 +63,8 @@ class Chat(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(255), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
     user = relationship("User", back_populates="chats")
     messages = relationship("Message", back_populates="chat")
@@ -78,8 +78,8 @@ class Message(Base):
     chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
     role = Column(String(50), nullable=False)
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
 
     chat = relationship("Chat", back_populates="messages")
 
@@ -104,7 +104,7 @@ class DocumentUpload(Base):
     file_size = Column(BigInteger, nullable=False)
     content_type = Column(String(100), nullable=False)
     temp_path = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
     status = Column(String(50), default="pending")
     error_message = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -124,8 +124,8 @@ class Document(Base):
     content_type = Column(String(100))
     file_hash = Column(String(64))
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     project = relationship("Project", back_populates="documents")
@@ -142,8 +142,8 @@ class ProcessingTask(Base):
     document_id = Column(Integer, ForeignKey("documents.id"))
     status = Column(String(50))
     error_message = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
     document_upload_id = Column(Integer, ForeignKey("document_uploads.id"))
     initiated_by = Column(Integer, ForeignKey("users.id"))
 
@@ -159,8 +159,8 @@ class DocumentChunk(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     file_name = Column(String(255), nullable=False)
     hash = Column(String(64), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now(UTC))
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
     chunk_metadata = Column(JSON)
 
