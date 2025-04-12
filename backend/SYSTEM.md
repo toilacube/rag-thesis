@@ -1,6 +1,3 @@
-## Setup 
-- To setup the backend please see README.md in `./backend` directory
-
 # Document Chat System Architecture
 
 This document provides an overview of the RAG (Retrieval-Augmented Generation) system architecture and explains how the document processing task queue works.
@@ -51,40 +48,24 @@ The system implements a robust document processing pipeline to handle document u
 
 ```mermaid
 sequenceDiagram
-    %% Color definitions
-    participant User as User<br>(Actor)
-    participant API as API<br>(System)
-    participant DocumentUpload as Document Upload<br>(Service)
-    participant ProcessingTask as Processing Task<br>(Worker)
-    participant Document as Document<br>(Database)
-    participant DocumentChunk as Chunks<br>(Vector DB)
+    participant User
+    participant API
+    participant DocumentUpload
+    participant ProcessingTask
+    participant Document
+    participant DocumentChunk
 
-    %% Color application
-    rect rgba(255,154,60,0.1)
     User->>API: Upload document
-    end
-
-    rect rgba(22,109,103,0.1)
     API->>DocumentUpload: Create entry (status: pending)
     API->>User: Confirm upload received
-    end
 
-    rect rgba(58,134,255,0.1)
     API->>ProcessingTask: Create processing task
     ProcessingTask->>DocumentUpload: Update status (processing)
-    end
 
-    rect rgba(131,56,236,0.1)
     ProcessingTask->>Document: Process document
     Document->>DocumentChunk: Create chunks
-    end
 
-    rect rgba(255,0,110,0.1)
     ProcessingTask->>DocumentUpload: Update status (completed)
-    end
-
-    %% Legend
-    Note right of User: Color Legend:<br>User Actions: Orange<br>Initial Processing: Teal<br>Document Handling: Blue<br>Chunking: Purple<br>Completion: Pink
 ```
 
 ## Task Queue Architecture
@@ -95,35 +76,18 @@ The document processing task queue is implemented using the following models:
 
 ```mermaid
 flowchart TD
-    %% Color scheme
-    classDef upload fill:#ff9a3c,stroke:#333
-    classDef validation fill:#ffbe0b,stroke:#333
-    classDef processing fill:#3a86ff,stroke:#333
-    classDef error fill:#ff006e,stroke:#333
-    classDef storage fill:#8338ec,stroke:#333
-
-    A[User uploads document]:::upload --> B[DocumentUpload created]:::upload
-    B --> C{Initial validation}:::validation
-    C -->|Valid| D[ProcessingTask created]:::processing
-    C -->|Invalid| E[DocumentUpload status: error]:::error
-    D --> F[Document processing]:::processing
-    F --> G[Text extraction]:::processing
-    G --> H[Document chunking]:::processing
-    H --> I[Embedding generation]:::storage
-    I --> J[Store in database]:::storage
-    J --> K[ProcessingTask status: completed]:::processing
-    F -->|Error| L[ProcessingTask status: error]:::error
-    L --> M[DocumentUpload status: error]:::error
-
-    %% Legend
-    subgraph Legend
-        direction TB
-        upload[Upload]:::upload
-        validation[Validation]:::validation
-        processing[Processing]:::processing
-        storage[Storage]:::storage
-        error[Error]:::error
-    end
+    A[User uploads document] --> B[DocumentUpload created]
+    B --> C{Initial validation}
+    C -->|Valid| D[ProcessingTask created]
+    C -->|Invalid| E[DocumentUpload status: error]
+    D --> F[Document processing]
+    F --> G[Text extraction]
+    G --> H[Document chunking]
+    H --> I[Embedding generation]
+    I --> J[Store in database]
+    J --> K[ProcessingTask status: completed]
+    F -->|Error| L[ProcessingTask status: error]
+    L --> M[DocumentUpload status: error]
 ```
 
 ## Models in Detail
