@@ -5,11 +5,21 @@ from app.core.exception_handler import register_error_handlers
 from app.api.api import main_router
 from app.config.config import config
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 db = sqlalchemy
 
 register_error_handlers(app)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust this to restrict origins in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(main_router, prefix="/api")
 

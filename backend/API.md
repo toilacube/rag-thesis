@@ -74,3 +74,143 @@ Response:
   "updated_at": "2025-03-27T07:47:00"
 }
 ```
+
+## Project API Documentation
+
+### Base URL
+
+All endpoints are prefixed with `/api`. For example, `http://localhost:8000/api/project`.
+
+### Endpoints
+
+#### 1. Create a Project
+
+**POST** `/project`
+
+**Request Body:**
+
+```json
+{
+  "project_name": "My Project",
+  "description": "This is a sample project."
+}
+```
+
+**Curl Example:**
+
+```bash
+curl -X POST http://localhost:8000/api/project \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_name": "My Project",
+    "description": "This is a sample project."
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "id": 1,
+  "project_name": "My Project",
+  "description": "This is a sample project."
+}
+```
+
+---
+
+#### 2. Get All Projects
+
+**GET** `/project`
+
+**Curl Example:**
+
+```bash
+curl -X GET http://localhost:8000/api/project
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": 1,
+    "project_name": "My Project",
+    "description": "This is a sample project."
+  }
+]
+```
+
+---
+
+#### 3. Get a Project by ID
+
+**GET** `/project/{project_id}`
+
+**Curl Example:**
+
+```bash
+curl -X GET http://localhost:8000/api/project/1
+```
+
+**Response:**
+
+```json
+{
+  "id": 1,
+  "project_name": "My Project",
+  "description": "This is a sample project."
+}
+```
+
+---
+
+#### 4. Update a Project
+
+**PUT** `/project/{project_id}`
+
+**Request Body:**
+
+```json
+{
+  "project_name": "Updated Project",
+  "description": "This is an updated project description."
+}
+```
+
+**Curl Example:**
+
+```bash
+curl -X PUT http://localhost:8000/api/project/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_name": "Updated Project",
+    "description": "This is an updated project description."
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "id": 1,
+  "project_name": "Updated Project",
+  "description": "This is an updated project description."
+}
+```
+
+---
+
+#### 5. Delete a Project
+
+**DELETE** `/project/{project_id}`
+
+**Curl Example:**
+
+```bash
+curl -X DELETE http://localhost:8000/api/project/1
+```
+
+**Response:**
+
+- Status Code: `204 No Content`
