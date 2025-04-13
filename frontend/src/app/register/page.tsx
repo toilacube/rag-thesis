@@ -1,10 +1,106 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { api, ApiError } from "@/lib/api";
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [error, setError] = useState("");
+  const [validationErrors, setValidationErrors] = useState({
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        email: "Please enter a valid email address",
+      }));
+      return false;
+    }
+    setValidationErrors((prev) => ({ ...prev, email: "" }));
+    return true;
+  };
+
+  const validatePassword = (password: string) => {
+    if (password.length < 8) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        password: "Password must be at least 8 characters long",
+      }));
+      return false;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        password: "Password must contain at least one uppercase letter",
+      }));
+      return false;
+    }
+    if (!/[a-z]/.test(password)) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        password: "Password must contain at least one lowercase letter",
+      }));
+      return false;
+    }
+    if (!/[0-9]/.test(password)) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        password: "Password must contain at least one number",
+      }));
+      return false;
+    }
+    setValidationErrors((prev) => ({ ...prev, password: "" }));
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
+    setValidationErrors({ email: "", password: "", confirmPassword: "" });
+
+    const formData = new FormData(e.currentTarget);
+    const username = formData.get("username") as string;
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const confirmPassword = formData.get("confirmPassword") as string;
+
+    const isEmailValid = validateEmail(email);
+    const isPasswordValid = validatePassword(password);
+
+    if (password !== confirmPassword) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        confirmPassword: "Passwords do not match",
+      }));
+      return;
+    }
+
+    if (!isEmailValid || !isPasswordValid) {
+      return;
+    }
+
+    try {
+      await api.post("/api/auth/register", {
+        username,
+        email,
+        password,
+      });
+
+      router.push("/login");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Registration failed");
+      }
+    }
   };
 
   return (
@@ -51,9 +147,19 @@ export default function RegisterPage() {
                   name="email"
                   type="email"
                   required
-                  className={`mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                  className={`mt-1 block w-full px-3 py-2 rounded-md border ${
+                    validationErrors.email
+                      ? "border-red-300"
+                      : "border-gray-300"
+                  } shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                   placeholder="Enter your email"
+                  onChange={(e) => validateEmail(e.target.value)}
                 />
+                {validationErrors.email && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {validationErrors.email}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -68,9 +174,19 @@ export default function RegisterPage() {
                   name="password"
                   type="password"
                   required
-                  className={`mt-1 block w-full px-3 py-2 rounded-md border border-gray-300  shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                  className={`mt-1 block w-full px-3 py-2 rounded-md border ${
+                    validationErrors.password
+                      ? "border-red-300"
+                      : "border-gray-300"
+                  } shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                   placeholder="Create a password"
+                  onChange={(e) => validatePassword(e.target.value)}
                 />
+                {validationErrors.password && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {validationErrors.password}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -85,11 +201,26 @@ export default function RegisterPage() {
                   name="confirmPassword"
                   type="password"
                   required
-                  className={`mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500`}
+                  className={`mt-1 block w-full px-3 py-2 rounded-md border ${
+                    validationErrors.confirmPassword
+                      ? "border-red-300"
+                      : "border-gray-300"
+                  } shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500`}
                   placeholder="Confirm your password"
                 />
+                {validationErrors.confirmPassword && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {validationErrors.confirmPassword}
+                  </p>
+                )}
               </div>
             </div>
+
+            {error && (
+              <div className="p-3 rounded-md bg-red-50 text-red-700 text-sm">
+                {error}
+              </div>
+            )}
 
             <button
               type="submit"
