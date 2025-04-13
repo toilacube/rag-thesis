@@ -10,7 +10,7 @@ import {
   FaBars,
   FaUser,
 } from "react-icons/fa";
-import Breadcrumb from "@/components/ui/breadcrumb";
+import Breadcrumb from "@/components/breadcrumb";
 
 export default function DashboardLayout({
   children,
