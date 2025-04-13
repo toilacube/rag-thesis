@@ -1,52 +1,98 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict
+from functools import wraps
 
-from app.dtos.documentDTO import DocumentUploadResponse, DocumentResponse
-from app.services.document import DocumentService, get_document_service
+from app.dtos.documentDTO import DocumentUploadResponse, DocumentResponse, ProcessingTaskResponse, DocumentWithStatusResponse
+from app.services.document import DocumentService, DocumentProcessingService, get_document_service, get_document_processing_service
+from app.services.permission import require_permission
 from db.database import get_db_session
+from app.core.security import get_current_user
+from app.models.models import User
 
 router = APIRouter()
 
 @router.post(
     "/upload", 
-    response_model=DocumentUploadResponse,
+    response_model=List[Dict],
     status_code=status.HTTP_201_CREATED,
-    summary="Upload a document to a project",
-    description="Upload a document file to a specified project. The file will be validated, saved, and queued for processing."
+    summary="Upload multiple documents to a project",
+    description="Upload one or more document files to a specified project. The files will be validated, saved, and queued for processing."
 )
-async def upload_document(
-    file: UploadFile = File(...),
+async def upload_documents(
+    files: List[UploadFile] = File(...),
     project_id: int = Form(...),
-    user_id: int = Form(...),  # In a real app, this would come from token
-    document_service: DocumentService = Depends(get_document_service)
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+    processing_service: DocumentProcessingService = Depends(get_document_processing_service)
 ):
     """
-    Upload a document to a project.
+    Upload multiple documents to a project.
     
-    - **file**: The document file to upload (PDF, DOCX, DOC, TXT, MD, XLS, XLSX)
-    - **project_id**: ID of the project to upload the document to
-    - **user_id**: ID of the user uploading the document
+    - **files**: The document files to upload (PDF, DOCX, DOC, TXT, MD, XLS, XLSX)
+    - **project_id**: ID of the project to upload the documents to
     
-    Returns the created DocumentUpload record with status information.
+    Returns the list of upload results with status information.
+    
+    Requires 'add_document' permission for the specified project.
     """
-    try:
-        document_upload = await document_service.upload_document(
-            file=file,
-            project_id=project_id,
-            user_id=user_id
-        )
-        return document_upload
-    except HTTPException as e:
-        # Pass through HTTP exceptions from the service
-        raise e
-    except Exception as e:
-        # Log unexpected errors and return a generic message
-        print(f"Unexpected error during document upload: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during document upload"
-        )
+    # Use the permission decorator
+    @require_permission("add_document")
+    async def _upload_with_permission(files, project_id, user_id, document_service, processing_service):
+        try:
+            # Upload the documents (validates files and creates DocumentUpload records)
+            upload_results = await document_service.upload_documents(
+                files=files,
+                project_id=project_id,
+                user_id=user_id
+            )
+            
+            # Extract the upload IDs of pending documents that need processing
+            upload_ids = [result["upload_id"] for result in upload_results 
+                         if result["status"] == "pending" and result["upload_id"] is not None]
+            
+            # If we have uploads to process, start processing them
+            if upload_ids:
+                await processing_service.process_documents(
+                    upload_ids=upload_ids,
+                    user_id=user_id
+                )
+            
+            return upload_results
+            
+        except HTTPException as e:
+            # Pass through HTTP exceptions from the service
+            raise e
+        except Exception as e:
+            # Log unexpected errors and return a generic message
+            print(f"Unexpected error during document upload: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred during document upload"
+            )
+    
+    # Call the wrapped function with permission check
+    return await _upload_with_permission(files, project_id, current_user.id, document_service, processing_service)
+
+@router.get(
+    "/upload/status",
+    response_model=Dict,
+    summary="Get document processing status",
+    description="Get the processing status for a list of document uploads"
+)
+async def get_processing_status(
+    upload_ids: List[int],
+    current_user: User = Depends(get_current_user),
+    processing_service: DocumentProcessingService = Depends(get_document_processing_service)
+):
+    """
+    Get the processing status for a list of document uploads.
+    
+    - **upload_ids**: List of document upload IDs to check
+    
+    Returns status information for each upload.
+    """
+    return await processing_service.get_processing_status(upload_ids)
 
 @router.get(
     "/{document_id}",
@@ -83,6 +129,7 @@ async def get_document(
 )
 async def get_documents_by_project(
     project_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ):
     """
@@ -91,8 +138,44 @@ async def get_documents_by_project(
     - **project_id**: ID of the project to get documents for
     
     Returns a list of Document objects.
-    """
-    from app.models.models import Document
     
-    documents = db.query(Document).filter(Document.project_id == project_id).all()
-    return documents
+    Requires 'view_project' permission for the specified project.
+    """
+    # Use the permission decorator
+    @require_permission("view_project")
+    async def _get_documents_with_permission(project_id, user_id, db):
+        from app.models.models import Document
+        documents = db.query(Document).filter(Document.project_id == project_id).all()
+        return documents
+    
+    # Call the wrapped function with permission check
+    return await _get_documents_with_permission(project_id, current_user.id, db)
+
+@router.get(
+    "/project/{project_id}/with-status",
+    response_model=List[DocumentWithStatusResponse],
+    summary="Get documents by project ID with processing status",
+    description="Retrieve all documents belonging to a project along with their processing status"
+)
+async def get_documents_with_status_by_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service)
+):
+    """
+    Get all documents with their processing status for a specific project.
+    
+    - **project_id**: ID of the project to get documents for
+    
+    Returns a list of documents with their processing status.
+    
+    Requires 'view_project' permission for the specified project.
+    """
+    # Use the permission decorator
+    @require_permission("view_project")
+    async def _get_documents_with_status_permission(project_id, user_id, document_service):
+        return await document_service.get_documents_with_status(project_id)
+    
+    # Call the wrapped function with permission check
+    return await _get_documents_with_status_permission(project_id, current_user.id, document_service)
+

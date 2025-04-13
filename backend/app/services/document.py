@@ -1,25 +1,13 @@
-'''
-TODO list:
-- upload document:
-    - check if document already exists
-    - check if document is valid
-    - check if document is in correct format
-    - check if document is in correct size
-    - check if document is in correct type
-    - upload document to S3 (mini IO)
-    - save document metadata to database
-- process document
-'''
-
 import os
 import hashlib
 import shutil
 import boto3
+import asyncio
 from fastapi import Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import UTC, datetime
 
 from app.models.models import Document, DocumentUpload, ProcessingTask, Project
@@ -67,7 +55,6 @@ class DocumentService:
                 config=boto3.session.Config(signature_version='s3v4')
             )
             
-            # Create bucket if it doesn't exist
             try:
                 s3_client.head_bucket(Bucket=self.bucket_name)
             except:
@@ -75,7 +62,6 @@ class DocumentService:
                 
             return s3_client
         except Exception as e:
-            # Log the error but continue - we'll handle S3 errors during upload
             print(f"Error initializing S3 client: {str(e)}")
             return None
     
@@ -112,29 +98,29 @@ class DocumentService:
         
         self.db.add(processing_task)
         self.db.commit()
+        self.db.refresh(processing_task)
         return processing_task
     
-    async def upload_document(
+    async def upload_documents(
         self, 
-        file: UploadFile, 
+        files: List[UploadFile], 
         project_id: int, 
         user_id: int
-    ) -> DocumentUpload:
+    ) -> List[Dict]:
         """
-        Upload a document, validating it and creating necessary database records.
+        Upload multiple documents, validating them and creating necessary database records.
         
         Args:
-            file: The file to upload
-            project_id: ID of the project to associate the document with
-            user_id: ID of the user uploading the document
+            files: List of files to upload
+            project_id: ID of the project to associate the documents with
+            user_id: ID of the user uploading the documents
             
         Returns:
-            DocumentUpload: The created document upload record
+            List[Dict]: List of upload results containing upload_id and is_exist status
             
         Raises:
             HTTPException: If validation fails or other errors occur
         """
-        # STEP 1: Validate project existence
         project = self.db.query(Project).filter(Project.id == project_id).first()
         if not project:
             raise HTTPException(
@@ -142,174 +128,466 @@ class DocumentService:
                 detail=f"Project with ID {project_id} not found"
             )
         
-        # STEP 2: Validate file type
-        if file.content_type not in ALLOWED_CONTENT_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type: {file.content_type}. Allowed types: {', '.join(ALLOWED_CONTENT_TYPES)}"
-            )
+        upload_results = []
         
-        # STEP 3: Read file content for validation and hash calculation
-        try:
-            # Move the file pointer to the beginning
-            await file.seek(0)
-            content = await file.read()
-            file_size = len(content)
+        for file in files:
+            try:
+                if file.content_type not in ALLOWED_CONTENT_TYPES:
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "error", 
+                        "error": f"Unsupported file type: {file.content_type}",
+                        "upload_id": None,
+                        "is_exist": False
+                    })
+                    continue
+                
+                try:
+                    await file.seek(0)
+                    content = await file.read()
+                    file_size = len(content)
+                    
+                    await file.seek(0)
+                except Exception as e:
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "error",
+                        "error": f"Error reading file: {str(e)}",
+                        "upload_id": None,
+                        "is_exist": False
+                    })
+                    continue
+                
+                if file_size > MAX_FILE_SIZE:
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "error",
+                        "error": f"File size exceeds maximum allowed ({MAX_FILE_SIZE // (1024 * 1024)}MB)",
+                        "upload_id": None,
+                        "is_exist": False
+                    })
+                    continue
+                
+                file_hash = hashlib.sha256(content).hexdigest()
+                
+                existing_document = self.db.query(Document).filter(
+                    Document.project_id == project_id,
+                    Document.file_hash == file_hash
+                ).first()
+                
+                if existing_document:
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "exists",
+                        "document_id": existing_document.id,
+                        "upload_id": None,
+                        "is_exist": True
+                    })
+                    continue
+                
+                os.makedirs(f"project_{project_id}/temp", exist_ok=True)
+                temp_file_path = f"project_{project_id}/temp/{file.filename}"
+                
+                try:
+                    with open(temp_file_path, "wb") as buffer:
+                        shutil.copyfileobj(file.file, buffer)
+                except Exception as e:
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "error",
+                        "error": f"Error saving file: {str(e)}",
+                        "upload_id": None,
+                        "is_exist": False
+                    })
+                    await file.seek(0)
+                    continue
+                finally:
+                    await file.seek(0)
+                
+                document_upload = DocumentUpload(
+                    project_id=project_id,
+                    file_name=file.filename, 
+                    file_hash=file_hash,
+                    file_size=file_size,
+                    content_type=file.content_type,
+                    temp_path=temp_file_path,
+                    user_id=user_id,
+                    status="pending",
+                    created_at=datetime.now(UTC)
+                )
+                
+                try:
+                    self.db.add(document_upload)
+                    self.db.commit()
+                    self.db.refresh(document_upload)
+                    
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "pending",
+                        "upload_id": document_upload.id,
+                        "is_exist": False
+                    })
+                    
+                except IntegrityError as e:
+                    if os.path.exists(temp_file_path):
+                        os.remove(temp_file_path)
+                        
+                    self.db.rollback()
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "error",
+                        "error": f"Database error: {str(e)}",
+                        "upload_id": None,
+                        "is_exist": False
+                    })
+                    
+                except Exception as e:
+                    if os.path.exists(temp_file_path):
+                        os.remove(temp_file_path)
+                        
+                    self.db.rollback()
+                    upload_results.append({
+                        "file_name": file.filename,
+                        "status": "error",
+                        "error": f"Error creating document upload record: {str(e)}",
+                        "upload_id": None,
+                        "is_exist": False
+                    })
+                    
+            except Exception as e:
+                upload_results.append({
+                    "file_name": file.filename if hasattr(file, "filename") else "unknown",
+                    "status": "error",
+                    "error": f"Unexpected error: {str(e)}",
+                    "upload_id": None,
+                    "is_exist": False
+                })
+                
+        return upload_results
+    
+    async def get_documents_with_status(self, project_id: int):
+        """
+        Get all documents for a project with their processing status
+        
+        Args:
+            project_id: ID of the project to get documents for
             
-            # Reset file pointer for later use
-            await file.seek(0)
+        Returns:
+            List of documents with their processing status
+        """
+        # Query all documents for the project
+        documents = self.db.query(Document).filter(Document.project_id == project_id).all()
+        
+        if not documents:
+            return []
+        
+        document_ids = [doc.id for doc in documents]
+        
+        processing_tasks = self.db.query(ProcessingTask).filter(
+            ProcessingTask.document_id.in_(document_ids)
+        ).all()
+        
+        task_dict = {}
+        for task in processing_tasks:
+            if task.document_id:
+                task_dict[task.document_id] = task
+        
+        result = []
+        for document in documents:
+            doc_dict = {
+                "id": document.id,
+                "file_path": document.file_path,
+                "file_name": document.file_name,
+                "file_size": document.file_size,
+                "content_type": document.content_type,
+                "file_hash": document.file_hash,
+                "project_id": document.project_id,
+                "created_at": document.created_at,
+                "updated_at": document.updated_at,
+                "uploaded_by": document.uploaded_by,
+                "processing_status": None,
+                "error_message": None
+            }
+            
+            # Add processing status if available
+            if document.id in task_dict:
+                task = task_dict[document.id]
+                doc_dict["processing_status"] = task.status
+                doc_dict["error_message"] = task.error_message
+            
+            result.append(doc_dict)
+            
+        return result
+    
+    
+class DocumentProcessingService:
+    def __init__(self, db: Session = Depends(get_db_session)):
+        self.db = db
+        self.config = getConfig()
+        self.s3_client = self._create_s3_client()
+        self.bucket_name = os.environ.get("MINIO_BUCKET_NAME", "documents")
+        
+    def _create_s3_client(self):
+        """Create and configure S3/MinIO client"""
+        try:
+            endpoint_url = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
+            access_key = os.environ.get("MINIO_ACCESS_KEY")
+            secret_key = os.environ.get("MINIO_SECRET_KEY")
+            
+            if not access_key or not secret_key:
+                raise ValueError("MinIO credentials not configured")
+                
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=endpoint_url,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name='us-east-1',  # Placeholder region for MinIO
+                config=boto3.session.Config(signature_version='s3v4')
+            )
+            
+            try:
+                s3_client.head_bucket(Bucket=self.bucket_name)
+            except:
+                s3_client.create_bucket(Bucket=self.bucket_name)
+                
+            return s3_client
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error reading file: {str(e)}"
-            )
+            print(f"Error initializing S3 client: {str(e)}")
+            return None
+    
+    async def process_documents(self, upload_ids: List[int], user_id: int):
+        """
+        Process documents that have been uploaded
         
-        # STEP 4: Validate file size
-        if file_size > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File size exceeds maximum allowed ({MAX_FILE_SIZE // (1024 * 1024)}MB)"
-            )
-        
-        # STEP 5: Calculate file hash for deduplication
-        file_hash = hashlib.sha256(content).hexdigest()
-        
-        # STEP 6: Check if the exact same document already exists in this project
-        existing_document = self.db.query(Document).filter(
-            Document.project_id == project_id,
-            Document.file_hash == file_hash
-        ).first()
-        
-        if existing_document:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Document already exists in this project: {existing_document.file_name}"
-            )
-        
-        # STEP 7: Save file to temporary location
-        upload_folder = self.config.UPLOAD_FOLDER
-        os.makedirs(upload_folder, exist_ok=True)
-        
-        temp_file_path = os.path.join(upload_folder, f"{file_hash}_{file.filename}")
-        
-        try:
-            with open(temp_file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error saving file: {str(e)}"
-            )
-        finally:
-            # Reset file pointer
-            await file.seek(0)
-        
-        # STEP 8: Create document upload record
-        document_upload = DocumentUpload(
-            project_id=project_id,
-            file_name=file.filename, 
-            file_hash=file_hash,
-            file_size=file_size,
-            content_type=file.content_type,
-            temp_path=temp_file_path,
-            user_id=user_id,
-            status="pending",
-            created_at=datetime.now(UTC)
-        )
-        
-        try:
-            self.db.add(document_upload)
-            self.db.commit()
-            self.db.refresh(document_upload)
-        except IntegrityError as e:
-            # Clean up temporary file
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-                
-            self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Database error: {str(e)}"
-            )
-        except Exception as e:
-            # Clean up temporary file
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-                
-            self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error creating document upload record: {str(e)}"
-            )
-        
-        # STEP 9: Upload file to S3/MinIO
-        try:
-            # Update status to processing
-            document_upload.status = "processing"
-            self.db.commit()
+        Args:
+            upload_ids: List of document upload IDs to process
+            user_id: ID of the user initiating the processing
             
-            # Upload to S3/MinIO if client is available
-            if self.s3_client:
-                s3_path = f"project_{project_id}/{file_hash}/{file.filename}"
-                
-                with open(temp_file_path, "rb") as f:
-                    self.s3_client.upload_fileobj(
-                        f, 
-                        self.bucket_name,
-                        s3_path,
-                        ExtraArgs={"ContentType": file.content_type}
-                    )
-                
-                # Create document record with S3 path
-                file_path = f"s3://{self.bucket_name}/{s3_path}"
-            else:
-                # Use local path if S3 client is not available
-                file_path = temp_file_path
+        Returns:
+            List[ProcessingTask]: The created processing tasks
+        """
+        tasks = []
+        
+        document_uploads = self.db.query(DocumentUpload).filter(
+            DocumentUpload.id.in_(upload_ids),
+            DocumentUpload.status == "pending"  # Only process pending uploads
+        ).all()
+        
+        upload_dict = {upload.id: upload for upload in document_uploads}
+        
+        for upload_id in upload_ids:
+            document_upload = upload_dict.get(upload_id)
             
-            # Create document record
-            document = self._create_document(
-                file_path=file_path,
-                file_name=file.filename,
-                file_size=file_size,
-                content_type=file.content_type,
-                file_hash=file_hash,
-                project_id=project_id,
-                user_id=user_id
-            )
+            if not document_upload:
+                print(f"Document upload {upload_id} not found or not in pending status")
+                continue
             
-            # Create processing task
-            self._create_processing_task(
-                project_id=project_id,
-                document_id=document.id,
+            processing_task = ProcessingTask(
+                project_id=document_upload.project_id,
+                status="pending",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 document_upload_id=document_upload.id,
-                user_id=user_id
+                initiated_by=user_id
             )
             
-            # Update document upload status to completed
-            document_upload.status = "completed"
+            self.db.add(processing_task)
             self.db.commit()
-            self.db.refresh(document_upload)
-                
-        except Exception as e:
-            # Update document upload status to error
-            document_upload.status = "error"
-            document_upload.error_message = str(e)
-            self.db.commit()
+            self.db.refresh(processing_task)
             
-            # Clean up temporary file 
+            asyncio.create_task(self._process_document(processing_task.id))
+            
+            tasks.append(processing_task)
+            
+        return tasks
+    
+    async def _process_document(self, processing_task_id: int):
+        """
+        Process a document in the background
+        
+        Args:
+            processing_task_id: ID of the processing task to execute
+        """
+        db = next(get_db_session())
+        
+        try:
+            processing_task = db.query(ProcessingTask).filter(
+                ProcessingTask.id == processing_task_id
+            ).first()
+            
+            if not processing_task:
+                print(f"Processing task {processing_task_id} not found")
+                return
+            
+            document_upload = db.query(DocumentUpload).filter(
+                DocumentUpload.id == processing_task.document_upload_id
+            ).first()
+            
+            if not document_upload:
+                print(f"Document upload {processing_task.document_upload_id} not found")
+                processing_task.status = "error"
+                processing_task.error_message = "Document upload not found"
+                processing_task.updated_at = datetime.now(UTC)
+                db.commit()
+                return
+            
+            processing_task.status = "processing"
+            document_upload.status = "processing"
+            db.commit()
+            
+            document = Document(
+                file_path="",  # Will be updated later
+                file_name=document_upload.file_name,
+                file_size=document_upload.file_size,
+                content_type=document_upload.content_type,
+                file_hash=document_upload.file_hash,
+                project_id=document_upload.project_id,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                uploaded_by=document_upload.user_id
+            )
+            
+            db.add(document)
+            db.commit()
+            db.refresh(document)
+            
+            processing_task.document_id = document.id
+            db.commit()
+            
+            temp_file_path = document_upload.temp_path
+            
+            if not os.path.exists(temp_file_path):
+                raise Exception(f"Temporary file not found: {temp_file_path}")
+            
+            if self.s3_client:
+                s3_path = f"project_{document_upload.project_id}/{document_upload.file_hash}/{document_upload.file_name}"
+                
+                try:
+                    with open(temp_file_path, "rb") as f:
+                        self.s3_client.upload_fileobj(
+                            f, 
+                            self.bucket_name,
+                            s3_path,
+                            ExtraArgs={"ContentType": document_upload.content_type}
+                        )
+                    
+                    document.file_path = f"s3://{self.bucket_name}/{s3_path}"
+                    db.commit()
+                    
+                except Exception as e:
+                    raise Exception(f"Error uploading to S3: {str(e)}")
+                
+            else:
+                perm_path = f"project_{document_upload.project_id}/documents/{document_upload.file_hash}_{document_upload.file_name}"
+                os.makedirs(os.path.dirname(perm_path), exist_ok=True)
+                
+                try:
+                    shutil.copy2(temp_file_path, perm_path)
+                    document.file_path = perm_path
+                    db.commit()
+                except Exception as e:
+                    raise Exception(f"Error copying to permanent location: {str(e)}")
+            
+            processing_task.status = "completed"
+            document_upload.status = "completed"
+            processing_task.updated_at = datetime.now(UTC)
+            db.commit()
+            
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
                 
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error uploading file to storage: {str(e)}"
-            )
+        except Exception as e:
+            try:
+                processing_task = db.query(ProcessingTask).filter(
+                    ProcessingTask.id == processing_task_id
+                ).first()
+                
+                if processing_task:
+                    processing_task.status = "error"
+                    processing_task.error_message = str(e)
+                    processing_task.updated_at = datetime.now(UTC)
+                
+                document_upload = db.query(DocumentUpload).filter(
+                    DocumentUpload.id == processing_task.document_upload_id
+                ).first()
+                
+                if document_upload:
+                    document_upload.status = "error"
+                    document_upload.error_message = str(e)
+                
+                db.commit()
+                
+            except Exception as inner_e:
+                print(f"Error updating task status: {str(inner_e)}")
+                
+            print(f"Error processing document: {str(e)}")
+            
+        finally:
+            db.close()
+    
+    async def get_processing_status(self, upload_ids: List[int]) -> Dict:
+        """
+        Get the processing status for a list of document uploads
         
-        return document_upload
+        Args:
+            upload_ids: List of document upload IDs to check
+            
+        Returns:
+            Dict: Status information for each upload
+        """
+        result = {}
+        
+        # Fetch all document uploads at once
+        document_uploads = self.db.query(DocumentUpload).filter(
+            DocumentUpload.id.in_(upload_ids)
+        ).all()
+        
+        # Create a lookup dictionary for uploads
+        upload_dict = {upload.id: upload for upload in document_uploads}
+        
+        # Fetch all processing tasks at once
+        processing_tasks = self.db.query(ProcessingTask).filter(
+            ProcessingTask.document_upload_id.in_(upload_ids)
+        ).all()
+        
+        # Create a lookup dictionary for tasks by document_upload_id
+        task_dict = {task.document_upload_id: task for task in processing_tasks}
+        
+        for upload_id in upload_ids:
+            document_upload = upload_dict.get(upload_id)
+            
+            if not document_upload:
+                result[upload_id] = {"status": "not_found"}
+                continue
+            
+            processing_task = task_dict.get(upload_id)
+            
+            status_info = {
+                "status": document_upload.status,
+                "file_name": document_upload.file_name
+            }
+            
+            if document_upload.status == "error":
+                status_info["error"] = document_upload.error_message
+                
+            if processing_task:
+                status_info["task_id"] = processing_task.id
+                status_info["task_status"] = processing_task.status
+                
+                if processing_task.document_id:
+                    status_info["document_id"] = processing_task.document_id
+            
+            result[upload_id] = status_info
+            
+        return result
     
     
-# Factory function for dependency injection
+# Factory functions for dependency injection
 def get_document_service(db: Session = Depends(get_db_session)) -> DocumentService:
     return DocumentService(db)
+
+def get_document_processing_service(db: Session = Depends(get_db_session)) -> DocumentProcessingService:
+    return DocumentProcessingService(db)
 
 
