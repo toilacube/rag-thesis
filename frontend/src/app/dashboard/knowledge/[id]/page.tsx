@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState, useCallback } from "react";
+import { DocumentUploadSteps } from "@/modules/knowledge-base/document-upload-steps";
 import { DocumentList } from "@/modules/knowledge-base/document-list";
 import {
   Dialog,
@@ -44,6 +45,10 @@ export default function KnowledgeBasePage() {
                 PDF, DOCX, Markdown, and Text files.
               </DialogDescription>
             </DialogHeader>
+            <DocumentUploadSteps
+              knowledgeBaseId={knowledgeBaseId}
+              onComplete={handleUploadComplete}
+            />
           </DialogContent>
         </Dialog>
       </div>
