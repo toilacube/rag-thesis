@@ -1,7 +1,10 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+/** @type {import('next').NextConfig} */
+module.exports = {
+  output: "standalone",
+  experimental: {
+    outputFileTracingRoot: undefined,
+    outputStandalone: true,
+    skipMiddlewareUrlNormalize: true,
+    skipTrailingSlashRedirect: true,
+  },
 };
-
-export default nextConfig;
