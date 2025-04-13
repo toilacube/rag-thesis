@@ -9,8 +9,13 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+const backendServer = process.env.BACKEND_SERVER || "localhost";
+const backendPort = process.env.BACKEND_PORT || "8000";
+const baseUrl = `http://${backendServer}:${backendPort}`;
 
-export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
+export async function fetchApi(path: string, options: FetchOptions = {}) {
+  const url = new URL(path, baseUrl).href;
+
   const { data, headers: customHeaders = {}, ...restOptions } = options;
 
   let token = "";
@@ -48,7 +53,7 @@ export async function fetchApi(fullUrl: string, options: FetchOptions = {}) {
   }
 
   try {
-    const response = await fetch(fullUrl, config);
+    const response = await fetch(url, config);
 
     if (response.status === 401) {
       if (typeof window !== "undefined") {
