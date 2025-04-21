@@ -3,7 +3,7 @@ import hashlib
 import shutil
 import boto3
 import asyncio
-from fastapi import Depends, HTTPException, status, UploadFile, File
+from fastapi import Depends, HTTPException, status, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from app.models.models import Document, DocumentUpload, ProcessingTask, Project
 from app.config.config import getConfig
 from db.database import get_db_session
+import tempfile
+from markitdown import MarkItDown
 
 # Define allowed file types and maximum file size
 ALLOWED_CONTENT_TYPES = [
@@ -27,7 +29,9 @@ ALLOWED_CONTENT_TYPES = [
 
 # Maximum file size (50MB)
 MAX_FILE_SIZE = 50 * 1024 * 1024
-
+SUPPORTED_EXTENSIONS = ["docx", "pptx", "pdf", "xlsx"]
+MAX_FILE_SIZE_MB = 50
+MAX_FILE_NAME_LENGTH = 50
 
 class DocumentService:
     def __init__(self, db: Session = Depends(get_db_session)):
@@ -582,7 +586,43 @@ class DocumentProcessingService:
             
         return result
     
-    
+    def validate_file(file: UploadFile):
+    # Check file extension
+        file_extension = file.filename.split(".")[-1].lower()
+        if file_extension not in SUPPORTED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Unsupported file type.")
+
+        # Check file size
+        file.file.seek(0, os.SEEK_END)
+        file_size_mb = file.file.tell() / (1024 * 1024)
+        file.file.seek(0)
+        if file_size_mb > MAX_FILE_SIZE_MB:
+            raise HTTPException(status_code=400, detail=f"File size exceeds the {MAX_FILE_SIZE_MB}MB limit.")
+
+        # Check file name length
+        if len(file.filename) > MAX_FILE_NAME_LENGTH:
+            # Change the file name to a shorter name
+            new_file_name = file.filename[:MAX_FILE_NAME_LENGTH]
+            file.filename = new_file_name
+
+    async def document_to_markdown(self, file: UploadFile):
+        try:
+            # Validate the file
+            self.validate_file(file)
+
+            # Save the file temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.split('.')[-1]}") as temp_file:
+                temp_file.write(file.file.read())
+                temp_file_path = temp_file.name
+
+            md = MarkItDown(enable_plugins=False) 
+            result = md.convert(temp_file_path)
+            os.remove(temp_file_path)
+            if not result:
+                raise Exception("Conversion failed.")
+            return result.markdown
+        except Exception as e:
+            raise e
 # Factory functions for dependency injection
 def get_document_service(db: Session = Depends(get_db_session)) -> DocumentService:
     return DocumentService(db)
