@@ -605,7 +605,7 @@ class DocumentProcessingService:
             new_file_name = file.filename[:MAX_FILE_NAME_LENGTH]
             file.filename = new_file_name
 
-    async def document_to_markdown(self, file: UploadFile):
+    async def document_to_markdown(self, file: UploadFile) -> str:
         try:
             # Validate the file
             self.validate_file(file)
