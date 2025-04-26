@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { api, ApiError } from "@/lib/api";
+import { useProject } from "@/contexts/ProjectContext";
 
-export default function NewKnowledgeBasePage() {
+export default function NewProjectPage() {
   const router = useRouter();
+  const { fetchProjects } = useProject();
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -12,16 +15,37 @@ export default function NewKnowledgeBasePage() {
     e.preventDefault();
     setError("");
     setIsSubmitting(true);
+
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get("name");
+    const description = formData.get("description");
+
+    try {
+      await api.post("/api/project", {
+        project_name: name,
+        description: description || "",
+      });
+
+      // Fetch the updated list of projects before navigation
+      await fetchProjects();
+
+      router.push("/dashboard/project");
+    } catch (err) {
+      console.error("Error creating project:", err);
+      setError(
+        err instanceof ApiError ? err.message : "Failed to create project"
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">
-          Create Knowledge Base
-        </h2>
+        <h2 className="text-3xl font-bold tracking-tight">Create Project</h2>
         <p className="text-muted-foreground">
-          Create a new knowledge base to store your documents
+          Create a new project to store your documents
         </p>
       </div>
 
@@ -39,7 +63,7 @@ export default function NewKnowledgeBasePage() {
             type="text"
             required
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="Enter knowledge base name"
+            placeholder="Enter project name"
           />
         </div>
 
@@ -54,7 +78,7 @@ export default function NewKnowledgeBasePage() {
             id="description"
             name="description"
             className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="Enter knowledge base description"
+            placeholder="Enter project description"
           />
         </div>
 

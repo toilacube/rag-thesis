@@ -4,11 +4,23 @@ interface FetchOptions extends Omit<RequestInit, "body" | "headers"> {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
     this.name = "ApiError";
+
+    // Maintains proper stack trace for where our error was thrown (only available on V8)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, ApiError);
+    }
+
+    // Set the prototype explicitly to ensure instanceof works correctly
+    Object.setPrototypeOf(this, ApiError.prototype);
   }
 }
+
 const backendServer = process.env.BACKEND_SERVER || "localhost";
 const backendPort = process.env.BACKEND_PORT || "8000";
 const baseUrl = `http://${backendServer}:${backendPort}`;
@@ -71,7 +83,14 @@ export async function fetchApi(path: string, options: FetchOptions = {}) {
       );
     }
 
-    return await response.json();
+    // Check if the response has content before trying to parse it as JSON
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      return await response.json(); 
+    } else {
+      // For empty responses (common with DELETE requests)
+      return { success: true, status: response.status };
+    }
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -91,7 +110,7 @@ export const api = {
     fetchApi(url, { ...options, method: "PUT", data }),
 
   delete: (url: string, options?: Omit<FetchOptions, "method">) =>
-    fetchApi(url, { ...options, method: "DELETE" }),
+    fetchApi(url, { ...options, method: "DELETE" }),  
 
   patch: (url: string, data?: any, options?: Omit<FetchOptions, "method">) =>
     fetchApi(url, { ...options, method: "PATCH", data }),

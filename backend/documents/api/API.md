@@ -213,4 +213,51 @@ curl -X DELETE http://localhost:8000/api/project/1
 
 **Response:**
 
-- Status Code: `204 No Content`
+```json
+{
+  "message": "Project deleted successfully",
+  "project_id": 1
+}
+```
+
+---
+
+#### 6. Get Projects for Current User
+
+**GET** `/project/user/me`
+
+**Description:** Retrieve all projects associated with the currently authenticated user, without needing to specify a user ID. If the user is a superuser (is_superuser=true), this endpoint will return all projects in the system regardless of permissions.
+
+**Curl Example:**
+
+```bash
+curl -X GET http://localhost:8000/api/project/user/me \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "id": 1,
+    "project_name": "My Project A",
+    "description": "First project for current user."
+  },
+  {
+    "id": 3,
+    "project_name": "My Project B",
+    "description": "Second project for current user."
+  }
+]
+```
+
+**Error Response (Unauthorized):**
+
+- Status Code: `401 Unauthorized`
+
+```json
+{
+  "detail": "Could not validate credentials"
+}
+```

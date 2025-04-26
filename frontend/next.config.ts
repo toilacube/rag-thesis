@@ -7,4 +7,5 @@ module.exports = {
     skipMiddlewareUrlNormalize: true,
     skipTrailingSlashRedirect: true,
   },
+  devIndicators: false,
 };

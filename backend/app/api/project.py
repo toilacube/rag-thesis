@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.dtos.projectDTO import CreateProjectRequest, ProjectResponse, UpdateProjectRequest
-from app.models.models import Project
+from app.models.models import Project, ProjectPermission
 from db.database import get_db_session
+from app.core.security import get_current_user
+from app.models.models import User
 
 router = APIRouter()
 
@@ -61,7 +63,7 @@ def update_project(
     db.refresh(project)
     return project
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{project_id}", status_code=status.HTTP_200_OK)
 def delete_project(project_id: int, db: Session = Depends(get_db_session)):
     """
     Delete a project by ID.
@@ -73,4 +75,26 @@ def delete_project(project_id: int, db: Session = Depends(get_db_session)):
         )
     db.delete(project)
     db.commit()
+    return {"message": "Project deleted successfully", "project_id": project_id}
 
+# Get all projects for the current user
+@router.get("/user/me", response_model=List[ProjectResponse])
+def get_projects_for_current_user(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retrieve all projects for the currently authenticated user.
+    Superusers can view all projects in the system.
+    """
+    # If user is a superuser, return all projects
+    if current_user.is_superuser:
+        return db.query(Project).all()
+    
+    # Otherwise, get only projects that the user has permission for
+    user_projects = db.query(Project)\
+        .join(ProjectPermission, Project.id == ProjectPermission.project_id)\
+        .filter(ProjectPermission.user_id == current_user.id)\
+        .all()
+    
+    return user_projects
