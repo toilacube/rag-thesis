@@ -13,6 +13,7 @@ import {
   TableRow,
 } from "@/components/table";
 import { FaFileAlt } from "react-icons/fa";
+import { api, ApiError } from "@/lib/api";
 
 interface Document {
   id: number;
@@ -29,19 +30,35 @@ interface Document {
 }
 
 interface DocumentListProps {
-  knowledgeBaseId: number;
+  projectId: number;
 }
 
-export function DocumentList({ knowledgeBaseId }: DocumentListProps) {
+export function DocumentList({ projectId: projectId }: DocumentListProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDocuments = async () => {};
+    const fetchDocuments = async () => {
+      try {
+        setLoading(true);
+        const data = await api.get(`/api/document/project/${projectId}`);
+        setDocuments(data);
+        setError(null);
+      } catch (error) {
+        console.error("Failed to fetch documents:", error);
+        if (error instanceof ApiError) {
+          setError(error.message);
+        } else {
+          setError("Failed to fetch documents. Please try again later.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
     fetchDocuments();
-  }, [knowledgeBaseId]);
+  }, [projectId]);
 
   if (loading) {
     return (

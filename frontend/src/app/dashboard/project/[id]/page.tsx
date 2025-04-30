@@ -17,7 +17,7 @@ import { Button } from "@/components/button";
 
 export default function KnowledgeBasePage() {
   const params = useParams();
-  const knowledgeBaseId = parseInt(params.id as string);
+  const projectId = parseInt(params.id as string);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -46,7 +46,7 @@ export default function KnowledgeBasePage() {
               </DialogDescription>
             </DialogHeader>
             <DocumentUploadSteps
-              knowledgeBaseId={knowledgeBaseId}
+              projectId={projectId}
               onComplete={handleUploadComplete}
             />
           </DialogContent>
@@ -54,7 +54,7 @@ export default function KnowledgeBasePage() {
       </div>
 
       <div className="mt-8">
-        <DocumentList key={refreshKey} knowledgeBaseId={knowledgeBaseId} />
+        <DocumentList key={refreshKey} projectId={projectId} />
       </div>
     </>
   );

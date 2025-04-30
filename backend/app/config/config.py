@@ -22,6 +22,12 @@ class Config:
     POSTGRES_DB = os.environ.get("POSTGRES_DB", "app_db")
 
     SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    
+    # MinIO configuration
+    MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
+    MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "anhyeuem")
+    MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "anhyeuem")
+    MINIO_BUCKET_NAME = os.environ.get("MINIO_BUCKET_NAME", "documents")
 
 class DevelopmentConfig(Config):
     DEBUG = True

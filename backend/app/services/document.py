@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional, Dict
 from datetime import UTC, datetime
+import uuid
 
 from app.models.models import Document, DocumentUpload, ProcessingTask, Project
 from app.config.config import getConfig
@@ -33,19 +34,49 @@ SUPPORTED_EXTENSIONS = ["docx", "pptx", "pdf", "xlsx"]
 MAX_FILE_SIZE_MB = 50
 MAX_FILE_NAME_LENGTH = 50
 
+# Default MinIO configuration
+DEFAULT_MINIO_ENDPOINT = "http://minio:9000"  # Using service name in docker network
+DEFAULT_MINIO_ACCESS_KEY = "anhyeuem"
+DEFAULT_MINIO_SECRET_KEY = "anhyeuem"
+DEFAULT_MINIO_BUCKET = "documents"
+
+# Central temp directory
+TEMP_DIR = os.path.join(os.getcwd(), "temp")
+
+def create_temp_file_path(filename):
+    """
+    Create a path for a temporary file in the central temp directory
+    
+    Args:
+        filename: Original filename to use as a reference
+        
+    Returns:
+        str: Path to the temporary file
+    """
+    # Ensure temp directory exists
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    
+    # Get file extension
+    ext = os.path.splitext(filename)[1]
+    
+    # Create a unique filename using UUID to avoid collisions
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    
+    return os.path.join(TEMP_DIR, unique_filename)
+
 class DocumentService:
     def __init__(self, db: Session = Depends(get_db_session)):
         self.db = db
         self.config = getConfig()
         self.s3_client = self._create_s3_client()
-        self.bucket_name = os.environ.get("MINIO_BUCKET_NAME", "documents")
+        self.bucket_name = self.config.MINIO_BUCKET_NAME
         
     def _create_s3_client(self):
         """Create and configure S3/MinIO client"""
         try:
-            endpoint_url = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
-            access_key = os.environ.get("MINIO_ACCESS_KEY")
-            secret_key = os.environ.get("MINIO_SECRET_KEY")
+            endpoint_url = self.config.MINIO_ENDPOINT
+            access_key = self.config.MINIO_ACCESS_KEY
+            secret_key = self.config.MINIO_SECRET_KEY
             
             if not access_key or not secret_key:
                 raise ValueError("MinIO credentials not configured")
@@ -189,8 +220,7 @@ class DocumentService:
                     })
                     continue
                 
-                os.makedirs(f"project_{project_id}/temp", exist_ok=True)
-                temp_file_path = f"project_{project_id}/temp/{file.filename}"
+                temp_file_path = create_temp_file_path(file.filename)
                 
                 try:
                     with open(temp_file_path, "wb") as buffer:
@@ -329,14 +359,14 @@ class DocumentProcessingService:
         self.db = db
         self.config = getConfig()
         self.s3_client = self._create_s3_client()
-        self.bucket_name = os.environ.get("MINIO_BUCKET_NAME", "documents")
+        self.bucket_name = self.config.MINIO_BUCKET_NAME
         
     def _create_s3_client(self):
         """Create and configure S3/MinIO client"""
         try:
-            endpoint_url = os.environ.get("MINIO_ENDPOINT", "http://localhost:9000")
-            access_key = os.environ.get("MINIO_ACCESS_KEY")
-            secret_key = os.environ.get("MINIO_SECRET_KEY")
+            endpoint_url = self.config.MINIO_ENDPOINT
+            access_key = self.config.MINIO_ACCESS_KEY
+            secret_key = self.config.MINIO_SECRET_KEY
             
             if not access_key or not secret_key:
                 raise ValueError("MinIO credentials not configured")
@@ -610,17 +640,21 @@ class DocumentProcessingService:
             # Validate the file
             self.validate_file(file)
 
-            # Save the file temporarily
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file.filename.split('.')[-1]}") as temp_file:
-                temp_file.write(file.file.read())
-                temp_file_path = temp_file.name
+            # Save the file to our temp directory
+            temp_file_path = create_temp_file_path(file.filename)
+            with open(temp_file_path, "wb") as buffer:
+                buffer.write(file.file.read())
 
-            md = MarkItDown(enable_plugins=False) 
-            result = md.convert(temp_file_path)
-            os.remove(temp_file_path)
-            if not result:
-                raise Exception("Conversion failed.")
-            return result.markdown
+            try:
+                md = MarkItDown(enable_plugins=False) 
+                result = md.convert(temp_file_path)
+                if not result:
+                    raise Exception("Conversion failed.")
+                return result.markdown
+            finally:
+                # Always clean up the temp file
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
         except Exception as e:
             raise e
 # Factory functions for dependency injection

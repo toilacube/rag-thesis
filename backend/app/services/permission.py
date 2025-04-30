@@ -81,57 +81,64 @@ def require_permission(permission_name: str, project_id_param: str = "project_id
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Get the database session
+            # Get database and service
             db = next(get_db_session())
-            
-            # Get the permission service
             permission_service = PermissionService(db)
             
-            # Extract the project_id from kwargs
+            # Extract project_id from kwargs or find in args
             project_id = kwargs.get(project_id_param)
+            if project_id is None:
+                # Look for project_id in the positional arguments by matching parameter name
+                sig = inspect.signature(func)
+                param_names = list(sig.parameters.keys())
+                if project_id_param in param_names and len(args) > param_names.index(project_id_param):
+                    project_id = args[param_names.index(project_id_param)]
             
-            # Extract the current_user from kwargs
+            # Similarly extract current_user or find in args
             current_user = kwargs.get("current_user")
-            if not current_user and "current_user" in inspect.signature(func).parameters:
-                # If the function expects current_user but it's not in kwargs,
-                # we're likely in a test environment where it's passed differently
+            if current_user is None:
+                # Look for a User object in args
                 for arg in args:
                     if isinstance(arg, User):
                         current_user = arg
                         break
+                        
+                # If still not found, check positional arguments by parameter name
+                if current_user is None and "current_user" in inspect.signature(func).parameters:
+                    param_names = list(sig.parameters.keys())
+                    current_user_index = param_names.index("current_user") if "current_user" in param_names else -1
+                    if current_user_index >= 0 and len(args) > current_user_index:
+                        current_user = args[current_user_index]
             
-            # Check if we have project_id
+            # Validate required parameters
             if not project_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Missing {project_id_param} parameter"
                 )
             
-            # Check if we have current_user
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Authentication required"
                 )
-            
-            # If the user is a superuser, they can access any project
+            print (f"Current user: {current_user}")
+            # Allow superusers to bypass permission check
             if current_user.is_superuser:
                 return await func(*args, **kwargs)
             
-            # For non-superusers, check for the required permission
-            has_permission = permission_service.check_permission(
+            # Check permission for regular users
+            if not permission_service.check_permission(
                 user_id=current_user.id,
                 project_id=project_id,
                 required_permission=permission_name
-            )
-            
-            if not has_permission:
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"User does not have '{permission_name}' permission for this project"
                 )
             
-            # If permission check passes, call the original function
+            # Permission check passed, call the original function
             return await func(*args, **kwargs)
         
         return wrapper
@@ -139,6 +146,7 @@ def require_permission(permission_name: str, project_id_param: str = "project_id
     return decorator
 
 
+# Simplified version that uses the main decorator
 def require_manage_users_or_superuser(project_id_param: str = "project_id"):
     """
     Decorator to check if the current user has 'manage_user' permission or is a superuser
@@ -146,62 +154,4 @@ def require_manage_users_or_superuser(project_id_param: str = "project_id"):
     Args:
         project_id_param: The parameter name that contains the project ID in the endpoint
     """
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            # Get the database session
-            db = next(get_db_session())
-            
-            # Get the permission service
-            permission_service = PermissionService(db)
-            
-            # Extract the project_id from kwargs
-            project_id = kwargs.get(project_id_param)
-            
-            # Extract the current_user from kwargs
-            current_user = kwargs.get("current_user")
-            if not current_user and "current_user" in inspect.signature(func).parameters:
-                # If the function expects current_user but it's not in kwargs,
-                # we're likely in a test environment where it's passed differently
-                for arg in args:
-                    if isinstance(arg, User):
-                        current_user = arg
-                        break
-            
-            # Check if we have project_id
-            if not project_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Missing {project_id_param} parameter"
-                )
-            
-            # Check if we have current_user
-            if not current_user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
-                )
-            
-            # If the user is a superuser, they can access any project
-            if current_user.is_superuser:
-                return await func(*args, **kwargs)
-            
-            # For non-superusers, check for the manage_user permission
-            has_permission = permission_service.check_permission(
-                user_id=current_user.id,
-                project_id=project_id,
-                required_permission="manage_user"
-            )
-            
-            if not has_permission:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You don't have permission to manage users for this project"
-                )
-            
-            # If permission check passes, call the original function
-            return await func(*args, **kwargs)
-        
-        return wrapper
-    
-    return decorator
+    return require_permission("manage_user", project_id_param)

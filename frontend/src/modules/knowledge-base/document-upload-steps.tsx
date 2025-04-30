@@ -34,7 +34,7 @@ import {
 } from "@/components/accordion";
 
 interface DocumentUploadStepsProps {
-  knowledgeBaseId: number;
+  projectId: number;
   onComplete?: () => void;
 }
 
@@ -95,7 +95,7 @@ interface TaskStatusResponse {
 }
 
 export function DocumentUploadSteps({
-  knowledgeBaseId,
+  projectId: projectId,
   onComplete,
 }: DocumentUploadStepsProps) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -151,13 +151,11 @@ export function DocumentUploadSteps({
         formData.append("files", fileStatus.file);
       });
 
-      const data = (await api.post(
-        `/api/knowledge-base/${knowledgeBaseId}/documents/upload`,
-        formData,
-        {
-          headers: {},
-        }
-      )) as UploadResult[];
+      formData.append("project_id", projectId.toString());
+
+      const data = (await api.post(`/api/document/upload`, formData, {
+        headers: {},
+      })) as UploadResult[];
 
       // Update file statuses
       setFiles((prev) =>
@@ -213,7 +211,7 @@ export function DocumentUploadSteps({
     setIsLoading(true);
     try {
       const data = await api.post(
-        `/api/knowledge-base/${knowledgeBaseId}/documents/preview`,
+        `/api/knowledge-base/${projectId}/documents/preview`,
         {
           document_ids: [selectedDocumentId],
           chunk_size: chunkSize,
@@ -258,7 +256,7 @@ export function DocumentUploadSteps({
     setIsLoading(true);
     try {
       const data = (await api.post(
-        `/api/knowledge-base/${knowledgeBaseId}/documents/process`,
+        `/api/knowledge-base/${projectId}/documents/process`,
         resultsToProcess
       )) as TaskResponse;
 
@@ -293,7 +291,7 @@ export function DocumentUploadSteps({
     const poll = async () => {
       try {
         const response = (await api.get(
-          `/api/knowledge-base/${knowledgeBaseId}/documents/tasks?task_ids=${taskIds.join(
+          `/api/knowledge-base/${projectId}/documents/tasks?task_ids=${taskIds.join(
             ","
           )}`
         )) as TaskStatusResponse;
