@@ -49,7 +49,54 @@ curl -X POST http://localhost:8000/api/document/upload \
 
 ---
 
-#### 2. Get Document by ID
+#### 2. Process Documents
+
+**POST** `/document/process`
+
+Process documents that have been uploaded but not yet processed.
+
+**Request Body:**
+
+```json
+{
+  "upload_ids": [1, 2, 3]
+}
+```
+
+**Curl Example:**
+
+```bash
+curl -X POST http://localhost:8000/api/document/process \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"upload_ids": [1, 2, 3]}'
+```
+
+**Response:**
+
+```json
+[
+  {
+    "upload_id": 1,
+    "status": "processing",
+    "message": "Document processing started"
+  },
+  {
+    "upload_id": 2,
+    "status": "processing",
+    "message": "Document processing started"
+  },
+  {
+    "upload_id": 3,
+    "status": "processing",
+    "message": "Document processing started"
+  }
+]
+```
+
+---
+
+#### 3. Get Document by ID
 
 **GET** `/document/{document_id}`
 
@@ -81,7 +128,7 @@ curl -X GET http://localhost:8000/api/document/1 \
 
 ---
 
-#### 3. Get Documents by Project ID
+#### 4. Get Documents by Project ID
 
 **GET** `/document/project/{project_id}`
 

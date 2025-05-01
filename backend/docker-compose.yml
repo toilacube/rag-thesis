@@ -24,6 +24,18 @@ services:
     command: server --console-address ":9001" /data
     networks:
       - rag-network
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=rag
+      - RABBITMQ_DEFAULT_PASS=rag
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - rag-network
 
 networks:
   rag-network:
@@ -31,3 +43,4 @@ networks:
 volumes:
   rag_data:
   minio_data:
+  rabbitmq_data:

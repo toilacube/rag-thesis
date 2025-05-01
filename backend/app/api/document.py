@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Dict
 from functools import wraps
@@ -48,15 +49,15 @@ async def upload_documents(
             )
             
             # Extract the upload IDs of pending documents that need processing
-            upload_ids = [result["upload_id"] for result in upload_results 
-                         if result["status"] == "pending" and result["upload_id"] is not None]
+            # upload_ids = [result["upload_id"] for result in upload_results 
+            #              if result["status"] == "pending" and result["upload_id"] is not None]
             
-            # If we have uploads to process, start processing them
-            if upload_ids:
-                await processing_service.process_documents(
-                    upload_ids=upload_ids,
-                    user_id=user_id
-                )
+            # # If we have uploads to process, start processing them
+            # if upload_ids:
+            #     await processing_service.process_documents(
+            #         upload_ids=upload_ids,
+            #         user_id=user_id
+            #     )
             
             return upload_results
             
@@ -73,6 +74,34 @@ async def upload_documents(
     
     # Call the wrapped function with permission check
     return await _upload_with_permission(files, project_id, current_user.id, document_service, processing_service)
+
+class UploadIDsRequest(BaseModel):
+    upload_ids: List[int]
+
+@router.post(
+    "/process",
+    # response_model=List[Dict],
+    summary="Process documents",
+    description="Process documents that have been uploaded but not yet processed"
+    )
+async def process_documents(
+    request: UploadIDsRequest,
+    current_user: User = Depends(get_current_user),
+    processing_service: DocumentProcessingService = Depends(get_document_processing_service)
+):
+    """
+    Process documents that have been uploaded but not yet processed.
+    
+    - **upload_ids**: List of document upload IDs to process
+    
+    Returns the list of processing task results.
+    """
+
+    return await processing_service.process_documents(
+        upload_ids=request.upload_ids,
+        user_id=current_user.id
+    )
+        
 
 @router.get(
     "/upload/status",
@@ -178,4 +207,3 @@ async def get_documents_with_status_by_project(
     
     # Call the wrapped function with permission check
     return await _get_documents_with_status_permission(project_id, current_user.id, document_service)
-

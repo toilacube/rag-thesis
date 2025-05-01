@@ -182,7 +182,6 @@ export function DocumentUploadSteps({
         })
       );
 
-      // 移除自动处理的逻辑，只更新步骤
       setCurrentStep(2);
       toast({
         title: "Upload successful",
@@ -239,29 +238,28 @@ export function DocumentUploadSteps({
 
   // Step 3: Process documents
   const handleProcess = async (uploadResults?: UploadResult[]) => {
-    const resultsToProcess =
-      uploadResults ||
-      files
-        .filter((f) => f.status === "uploaded")
-        .map((f) => ({
-          upload_id: f.uploadId!,
-          file_name: f.file.name,
-          status: "pending" as const,
-          skip_processing: false,
-          temp_path: f.tempPath!,
-        }));
+    const uploadIds = uploadResults
+      ? uploadResults.map((result) => result.upload_id!).filter((id) => id)
+      : files
+          .filter((f) => f.status === "uploaded")
+          .map((f) => f.uploadId!)
+          .filter((id) => id);
 
-    if (resultsToProcess.length === 0) return;
+    if (uploadIds.length === 0) return;
 
     setIsLoading(true);
     try {
-      const data = (await api.post(
-        `/api/knowledge-base/${projectId}/documents/process`,
-        resultsToProcess
-      )) as TaskResponse;
+      const data = await api.post(`/api/document/process`, {
+        upload_ids: uploadIds,
+      });
 
-      // Initialize task statuses
-      const initialStatuses = data.tasks.reduce<TaskStatusMap>(
+      // Initialize task statuses for tracking
+      const tasks = uploadIds.map((id) => ({
+        upload_id: id,
+        task_id: id, // Using upload_id as task_id for tracking
+      }));
+
+      const initialStatuses = tasks.reduce<TaskStatusMap>(
         (acc, task) => ({
           ...acc,
           [task.task_id]: {
@@ -274,7 +272,7 @@ export function DocumentUploadSteps({
       setTaskStatuses(initialStatuses);
 
       // Start polling for task status
-      pollTaskStatus(data.tasks.map((t) => t.task_id));
+      pollTaskStatus(tasks.map((t) => t.task_id));
     } catch (error) {
       setIsLoading(false);
       toast({

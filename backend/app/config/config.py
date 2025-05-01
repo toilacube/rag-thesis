@@ -28,6 +28,15 @@ class Config:
     MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "anhyeuem")
     MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "anhyeuem")
     MINIO_BUCKET_NAME = os.environ.get("MINIO_BUCKET_NAME", "documents")
+    
+    # RabbitMQ configuration
+    RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "localhost")
+    RABBITMQ_PORT = int(os.environ.get("RABBITMQ_PORT", 5672))
+    RABBITMQ_USER = os.environ.get("RABBITMQ_USER", "rag")
+    RABBITMQ_PASSWORD = os.environ.get("RABBITMQ_PASSWORD", "rag")
+    RABBITMQ_VHOST = os.environ.get("RABBITMQ_VHOST", "/")
+    RABBITMQ_DOCUMENT_QUEUE = os.environ.get("RABBITMQ_DOCUMENT_QUEUE", "document_processing")
+    RABBITMQ_CHUNK_QUEUE = os.environ.get("RABBITMQ_CHUNK_QUEUE", "document_chunking")
 
 class DevelopmentConfig(Config):
     DEBUG = True

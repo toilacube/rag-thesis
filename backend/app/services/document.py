@@ -35,7 +35,7 @@ MAX_FILE_SIZE_MB = 50
 MAX_FILE_NAME_LENGTH = 50
 
 # Default MinIO configuration
-DEFAULT_MINIO_ENDPOINT = "http://minio:9000"  # Using service name in docker network
+DEFAULT_MINIO_ENDPOINT = "http://localhost:9000"  # Using service name in docker network
 DEFAULT_MINIO_ACCESS_KEY = "anhyeuem"
 DEFAULT_MINIO_SECRET_KEY = "anhyeuem"
 DEFAULT_MINIO_BUCKET = "documents"
@@ -358,8 +358,8 @@ class DocumentProcessingService:
     def __init__(self, db: Session = Depends(get_db_session)):
         self.db = db
         self.config = getConfig()
-        self.s3_client = self._create_s3_client()
         self.bucket_name = self.config.MINIO_BUCKET_NAME
+        self.s3_client = self._create_s3_client()
         
     def _create_s3_client(self):
         """Create and configure S3/MinIO client"""
@@ -401,14 +401,17 @@ class DocumentProcessingService:
         Returns:
             List[ProcessingTask]: The created processing tasks
         """
-        tasks = []
-        
+        # Filter valid document uploads in a single query
         document_uploads = self.db.query(DocumentUpload).filter(
             DocumentUpload.id.in_(upload_ids),
             DocumentUpload.status == "pending"  # Only process pending uploads
         ).all()
         
         upload_dict = {upload.id: upload for upload in document_uploads}
+        
+        # Prepare all processing tasks at once
+        now = datetime.now(UTC)
+        tasks_to_create = []
         
         for upload_id in upload_ids:
             document_upload = upload_dict.get(upload_id)
@@ -417,24 +420,29 @@ class DocumentProcessingService:
                 print(f"Document upload {upload_id} not found or not in pending status")
                 continue
             
-            processing_task = ProcessingTask(
+            tasks_to_create.append(ProcessingTask(
                 project_id=document_upload.project_id,
                 status="pending",
-                created_at=datetime.now(UTC),
-                updated_at=datetime.now(UTC),
+                created_at=now,
+                updated_at=now,
                 document_upload_id=document_upload.id,
                 initiated_by=user_id
-            )
-            
-            self.db.add(processing_task)
+            ))
+        
+        # Bulk insert all tasks at once
+        if tasks_to_create:
+            self.db.add_all(tasks_to_create)
             self.db.commit()
-            self.db.refresh(processing_task)
             
-            asyncio.create_task(self._process_document(processing_task.id))
-            
-            tasks.append(processing_task)
-            
-        return tasks
+            # Refresh all tasks to get their IDs
+            for task in tasks_to_create:
+                self.db.refresh(task)
+                
+            # Start async processing for each task
+            for task in tasks_to_create:
+                asyncio.create_task(self._process_document(task.id))
+        
+        return tasks_to_create
     
     async def _process_document(self, processing_task_id: int):
         """
