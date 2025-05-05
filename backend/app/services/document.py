@@ -16,6 +16,7 @@ from app.config.config import getConfig
 from db.database import get_db_session
 import tempfile
 from markitdown import MarkItDown
+from app.services.chunking import chunk_markdown, save_chunks_to_database
 
 # Define allowed file types and maximum file size
 ALLOWED_CONTENT_TYPES = [
@@ -567,6 +568,74 @@ class DocumentProcessingService:
             
         finally:
             db.close()
+    
+    async def process_markdown_and_save_chunks(
+        self,
+        markdown_text: str,
+        document_id: int,
+        file_name: str,
+        project_id: int,
+        file_hash: str = None,
+        split_level: int = 2,
+        max_chunk_size: int = 1000,
+        chunk_overlap: int = 50
+    ) -> List[str]:
+        """
+        Process markdown text into chunks and save them to the database.
+        
+        Args:
+            markdown_text: The markdown text to process
+            document_id: ID of the document these chunks belong to
+            file_name: Name of the source file
+            project_id: ID of the project
+            file_hash: Hash of the source file (will be generated if not provided)
+            split_level: Header level to split by (e.g., 2 for ##)
+            max_chunk_size: Maximum size of each chunk
+            chunk_overlap: Overlap between chunks for recursive splitting
+            
+        Returns:
+            List of chunk IDs that were saved to the database
+        """
+        # Generate file hash if not provided
+        if not file_hash:
+            file_hash = hashlib.sha256(markdown_text.encode()).hexdigest()
+        
+        # Check if document exists
+        document = self.db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise ValueError(f"Document with ID {document_id} not found")
+        
+        # Check if project exists
+        project = self.db.query(Project).filter(Project.id == project_id).first()
+        if not project:
+            raise ValueError(f"Project with ID {project_id} not found")
+        
+        try:
+            # Break the markdown into chunks using the chunking service
+            chunks = chunk_markdown(
+                markdown_text=markdown_text,
+                split_level=split_level,
+                max_chunk_size=max_chunk_size,
+                chunk_overlap=chunk_overlap,
+                source_document=str(document_id)
+            )
+            
+            # Save the chunks to the database
+            chunk_ids = save_chunks_to_database(
+                db=self.db,
+                chunks=chunks,
+                document_id=document_id,
+                project_id=project_id,
+                file_name=file_name,
+                file_hash=file_hash
+            )
+            
+            return chunk_ids
+            
+        except Exception as e:
+            # Log the error
+            print(f"Error processing markdown into chunks: {str(e)}")
+            raise e
     
     async def get_processing_status(self, upload_ids: List[int]) -> Dict:
         """

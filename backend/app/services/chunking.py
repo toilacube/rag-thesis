@@ -1,6 +1,9 @@
 import re
 import uuid
+import hashlib
 from typing import List, Dict, Optional, Tuple
+from sqlalchemy.orm import Session
+from app.models.models import DocumentChunk, Document
 
 def _split_text_recursive(
     text: str, max_chunk_size: int, separators: List[str], chunk_overlap: int = 50
@@ -223,3 +226,60 @@ def chunk_markdown(
                  chunk["text"] = chunk["text"].replace(placeholder, code)
 
     return final_chunks
+
+def save_chunks_to_database(
+    db: Session,
+    chunks: List[Dict],
+    document_id: int,
+    project_id: int,
+    file_name: str,
+    file_hash: str
+) -> List[str]:
+    """
+    Saves document chunks to the database.
+    
+    Args:
+        db: SQLAlchemy database session
+        chunks: List of chunk dictionaries from chunk_markdown function
+        document_id: ID of the document these chunks belong to
+        project_id: ID of the project these chunks belong to
+        file_name: Name of the source file
+        file_hash: Hash of the source file
+        
+    Returns:
+        List of chunk IDs that were saved to the database
+    """
+    saved_chunk_ids = []
+    
+    for chunk in chunks:
+        # Generate a unique chunk ID if not already present
+        chunk_id = chunk["metadata"].get("chunk_id")
+        if not chunk_id:
+            # Create a deterministic ID based on content and document
+            content_hash = hashlib.sha256(chunk["text"].encode()).hexdigest()[:16]
+            chunk_id = f"{file_hash[:8]}_{content_hash}"
+            chunk["metadata"]["chunk_id"] = chunk_id
+        
+        # Create a new database record
+        db_chunk = DocumentChunk(
+            id=chunk_id,
+            project_id=project_id,
+            document_id=document_id,
+            file_name=file_name,
+            hash=file_hash,
+            chunk_metadata=chunk["metadata"]
+        )
+        
+        # Add the chunk text directly to the metadata for storage
+        # This assumes the metadata field can store the text content
+        db_chunk.chunk_metadata["content"] = chunk["text"]
+        
+        # Add to session and commit
+        db.add(db_chunk)
+        saved_chunk_ids.append(chunk_id)
+    
+    # Commit all chunks in a single transaction
+    db.commit()
+    
+    return saved_chunk_ids
+
