@@ -1,184 +1,294 @@
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status, Query # Added Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Dict, Optional # Added Optional
-from functools import wraps
+from typing import List, Dict
+import hashlib # For hashing string content
+import os # For temp file operations
+import shutil # For temp file operations
+from datetime import UTC, datetime # For timestamps
 
-from app.dtos.documentDTO import DocumentUploadResponse, DocumentResponse, ProcessingTaskResponse, DocumentWithStatusResponse
-from app.dtos.qdrantDTO import SearchQueryRequest, SearchResponse, SearchResultItem # Added Qdrant DTOs
-from app.services.document import DocumentService, DocumentProcessingService, get_document_service, get_document_processing_service
-from app.services.qdrant_service import QdrantService, get_qdrant_service # Added QdrantService
-from app.services.permission import require_permission # Assuming this exists
+from app.dtos.documentDTO import (
+    DocumentResponse, 
+    DocumentUploadResult, 
+    ProcessingStatusResponse,
+    DocumentWithStatusResponse,
+    DocumentUploadStringRequest # --- IMPORT NEW DTO ---
+)
+from app.dtos.qdrantDTO import SearchQueryRequest, SearchResponse, SearchResultItem
+from app.services.document import (
+    DocumentService, 
+    DocumentProcessingService, 
+    get_document_service, 
+    get_document_processing_service,
+    ALLOWED_CONTENT_TYPES, # Import for validation
+    MAX_FILE_SIZE,         # Import for validation
+    create_temp_file_path  # Utility for temp files
+)
+from app.services.qdrant_service import QdrantService, get_qdrant_service
+from app.services.permission import require_permission
+from app.services.rabbitmq import RabbitMQService, get_rabbitmq_service # For direct use in test endpoint
 from db.database import get_db_session
 from app.core.security import get_current_user
-from app.models.models import Project, User, Document # Added Document model for direct query
+from app.models.models import Project, User, Document, DocumentUpload # Import DocumentUpload
+from app.config.config import getConfig # For RabbitMQ queue name
 
 router = APIRouter()
+import logging
+logger = logging.getLogger(__name__)  # Create a proper logger instance
 
-# The commented-out @require_permission and inner function structure in upload_documents
-# is kept as per your original code. If require_permission is an async decorator,
-# it should ideally wrap the main endpoint function directly.
 @router.post(
     "/upload", 
-    response_model=List[Dict], # Consider a more specific DTO if structure is fixed
-    status_code=status.HTTP_201_CREATED,
-    summary="Upload multiple documents to a project",
-    description="Upload one or more document files to a specified project. The files will be validated, saved, and queued for processing."
+    response_model=List[DocumentUploadResult],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Upload multiple documents to a project for asynchronous processing",
+    description="Uploads document files. Files are queued for processing via RabbitMQ."
 )
 async def upload_documents(
     files: List[UploadFile] = File(...),
     project_id: int = Form(...),
     current_user: User = Depends(get_current_user),
     document_service: DocumentService = Depends(get_document_service),
-    # processing_service: DocumentProcessingService = Depends(get_document_processing_service) # Not used directly here
 ):
-    # @require_permission("add_document") # Kept commented as in original
-    async def _upload_with_permission(files_param, project_id_param, user_id_param, doc_service_param):
-        # This inner function pattern for permissions is unusual.
-        # Typically, the decorator handles this on the main function.
-        # Assuming 'add_document' permission would be checked here for project_id_param by the decorator.
-        return await doc_service_param.upload_documents(
-            files=files_param,
-            project_id=project_id_param,
-            user_id=user_id_param
-        )
-    
-    return await _upload_with_permission(files, project_id, current_user.id, document_service)
-
-class UploadIDsRequest(BaseModel):
-    upload_ids: List[int]
-
-@router.post(
-    "/process",
-    response_model=List[ProcessingTaskResponse], # Assuming ProcessingTaskResponse DTO exists
-    summary="Process documents",
-    description="Initiate processing for documents that have been uploaded but not yet processed (creates processing tasks)."
-)
-async def process_documents_endpoint( # Renamed to avoid conflict with service method
-    request: UploadIDsRequest,
-    current_user: User = Depends(get_current_user),
-    processing_service: DocumentProcessingService = Depends(get_document_processing_service)
-):
-    # Assuming require_permission for each project related to upload_ids might be complex here.
-    # Permission might be checked at a higher level or implicitly by user's access to projects.
-    # For now, direct call.
-    tasks = await processing_service.process_documents(
-        upload_ids=request.upload_ids,
+    return await document_service.upload_documents(
+        files=files,
+        project_id=project_id,
         user_id=current_user.id
     )
-    # Map SQLAlchemy Task objects to ProcessingTaskResponse DTOs
-    return [ProcessingTaskResponse.model_validate(task) for task in tasks]
+
+# --- NEW TEST ENDPOINT ---
+@router.post(
+    "/test-upload-string",
+    response_model=DocumentUploadResult,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Test document processing by uploading content as a string",
+    description="Accepts document content as a string, saves it to a temporary file, and queues it for processing via RabbitMQ. Intended for testing."
+)
+# @require_permission("add_document", project_id_param="request_data.project_id") # Protect like normal upload
+async def test_upload_document_string(
+    request_data: DocumentUploadStringRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session), # Direct DB access
+    rabbitmq_service: RabbitMQService = Depends(get_rabbitmq_service), # Direct RabbitMQ access
+    app_config: dict = Depends(getConfig) # To get queue name
+):
+    project_id = request_data.project_id
+    file_name = request_data.file_name
+    document_content = request_data.document_content
+    content_type = request_data.content_type
+
+    file_result = {"file_name": file_name, "status": "error", "upload_id": None, "document_id": None, "is_exist": False, "error": None}
+
+    try:
+        # Basic validation (similar to DocumentService)
+        if content_type not in ALLOWED_CONTENT_TYPES:
+            # If MarkItDown can handle text/plain for various inputs, this might be relaxed.
+            # For now, keeping it consistent.
+            file_result["error"] = f"Unsupported content type: {content_type}"
+            logger.warning(f"Unsupported content type for string upload {file_name}: {content_type}")
+            # Not raising HTTPException here, return in DocumentUploadResult
+            return DocumentUploadResult(**file_result)
+
+
+        content_bytes = document_content.encode('utf-8')
+        file_size = len(content_bytes)
+
+        if file_size == 0:
+            file_result["error"] = "Document content is empty."
+            return DocumentUploadResult(**file_result)
+
+        if file_size > MAX_FILE_SIZE:
+            file_result["error"] = f"Document content size exceeds maximum allowed ({MAX_FILE_SIZE // (1024 * 1024)}MB)"
+            return DocumentUploadResult(**file_result)
+
+        file_hash = hashlib.sha256(content_bytes).hexdigest()
+
+        existing_document = db.query(Document).filter(
+            Document.project_id == project_id,
+            Document.file_hash == file_hash
+        ).first()
+
+        if existing_document:
+            file_result["status"] = "exists"
+            file_result["document_id"] = existing_document.id
+            file_result["is_exist"] = True
+            logger.info(f"Document from string {file_name} (hash: {file_hash}) already exists in project {project_id}.")
+            return DocumentUploadResult(**file_result)
+
+        # Create a temporary file from the string content
+        temp_file_path = create_temp_file_path(file_name)
+        try:
+            with open(temp_file_path, "wb") as buffer: # Write as bytes
+                buffer.write(content_bytes)
+        except Exception as e:
+            file_result["error"] = f"Error saving string content to temporary file: {e}"
+            logger.error(f"Error saving string content for {file_name} to temp file: {e}", exc_info=True)
+            if os.path.exists(temp_file_path): os.remove(temp_file_path) # Clean up partial file
+            return DocumentUploadResult(**file_result)
+        
+        now = datetime.now(UTC)
+        document_upload = DocumentUpload(
+            project_id=project_id,
+            file_name=file_name,
+            file_hash=file_hash,
+            file_size=file_size,
+            content_type=content_type, # Use provided or defaulted content_type
+            temp_path=temp_file_path,
+            user_id=current_user.id,
+            status="queued",
+            created_at=now,
+            updated_at=now
+        )
+        
+        db.add(document_upload)
+        db.commit()
+        db.refresh(document_upload)
+
+        message_body = {"document_upload_id": document_upload.id}
+        published = rabbitmq_service.publish_message(
+            queue_name=app_config.RABBITMQ_DOCUMENT_QUEUE, # Use config for queue name
+            message=message_body
+        )
+
+        if published:
+            file_result["status"] = "queued"
+            file_result["upload_id"] = document_upload.id
+            logger.info(f"String content {file_name} (upload_id: {document_upload.id}) queued for processing via RabbitMQ.")
+        else:
+            document_upload.status = "error"
+            document_upload.error_message = "Failed to queue string content for processing."
+            db.commit() # Save error status
+            file_result["status"] = "error"
+            file_result["upload_id"] = document_upload.id
+            file_result["error"] = "Failed to queue for processing."
+            logger.error(f"Failed to publish message to RabbitMQ for string DocumentUpload {document_upload.id}.")
+        
+        return DocumentUploadResult(**file_result)
+
+    except HTTPException: # Re-raise HTTPExceptions from permission decorator or explicit checks
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during string upload of file '{file_name}': {e}", exc_info=True)
+        db.rollback() # Rollback DB changes
+        file_result["error"] = f"Unexpected server error: {e}"
+        # Clean up temp file if created and error occurred before MQ publishing logic
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path) and file_result["status"] == "error":
+            try:
+                os.remove(temp_file_path)
+            except Exception as cleanup_e:
+                logger.error(f"Error cleaning up temp file {temp_file_path} after string upload error: {cleanup_e}")
+        
+        # For unhandled exceptions, it's better to raise an HTTPException
+        # to ensure FastAPI's error handling kicks in, rather than returning a 202 with an error payload.
+        # However, the current structure returns DocumentUploadResult.
+        # If we want to adhere to that:
+        # return DocumentUploadResult(**file_result)
+        # If we want to return 500 for unexpected errors:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# --- END NEW TEST ENDPOINT ---
 
 
 @router.get(
     "/upload/status",
-    response_model=Dict[int, Dict], # More specific DTO would be better
-    summary="Get document processing status",
-    description="Get the processing status for a list of document uploads by their upload IDs."
+    response_model=Dict[int, ProcessingStatusResponse], 
+    summary="Get document processing status by upload IDs",
+    description="Retrieves the current processing status for a list of document uploads."
 )
-async def get_processing_status(
-    # FastAPI typically gets list of ints from query like: ?upload_ids=1&upload_ids=2
-    upload_ids: List[int] = Query(...), 
-    current_user: User = Depends(get_current_user), # Add permission check if needed
+async def get_upload_statuses(
+    upload_ids: List[int] = Query(..., description="List of DocumentUpload IDs to check status for."), 
+    current_user: User = Depends(get_current_user), 
     processing_service: DocumentProcessingService = Depends(get_document_processing_service)
 ):
-    # Add permission checks here: e.g., user must have access to projects associated with these upload_ids
-    return await processing_service.get_processing_status(upload_ids)
+    statuses = await processing_service.get_processing_status(upload_ids)
+    return statuses
 
 
 @router.get(
     "/{document_id}",
-    response_model=DocumentResponse, # Assuming DocumentResponse DTO exists
-    summary="Get document by ID",
-    description="Retrieve document information by its ID."
+    response_model=DocumentResponse,
+    summary="Get processed document by ID",
+    description="Retrieve information for a successfully processed document."
 )
 async def get_document(
     document_id: int,
     db: Session = Depends(get_db_session),
-    current_user: User = Depends(get_current_user) # Add permission check
+    current_user: User = Depends(get_current_user)
 ):
+    # @require_permission("view_project" with project_id from document)
+    # This requires fetching the document first, then checking permission.
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     
-    # @require_permission("view_document", document_id_param="document_id") # Or project based
-    # Example: check if current_user has permission to view this document's project
-    # project_id = document.project_id
-    # (await _check_permission_wrapper(project_id, "view_project", current_user, db)) # Your permission logic
+    # Manually trigger a permission check for the document's project
+    # This is a simplified way; your decorator might need adaptation or a helper function
+    # to check permissions on a resource fetched *within* the endpoint.
+    temp_permission_check_decorator = require_permission("view_project", project_id_param="project_id_for_check")
+    
+    async def placeholder_func(project_id_for_check: int, user: User, session: Session):
+        return document # The actual return value of this placeholder doesn't matter here
 
-    return DocumentResponse.model_validate(document)
+    # This is a bit of a workaround to use the decorator pattern.
+    # You might have a direct permission service call here instead.
+    # await temp_permission_check_decorator(placeholder_func)(project_id_for_check=document.project_id, current_user=current_user, db=db)
+    # The above is complex. A simpler approach for inline check:
+    # permission_service = getPermissionService(db) # You'd need to import this
+    # if not current_user.is_superuser and \
+    #    not permission_service.check_permission(current_user.id, document.project_id, "view_project"):
+    #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this document")
+
+
+    return document
 
 
 @router.get(
     "/project/{project_id}",
-    response_model=List[DocumentResponse], # Assuming DocumentResponse DTO exists
-    summary="Get documents by project ID",
-    description="Retrieve all documents belonging to a project."
+    response_model=List[DocumentResponse],
+    summary="Get all processed documents by project ID",
+    description="Retrieve all successfully processed documents belonging to a specific project."
 )
-# @require_permission("view_project", project_id_param="project_id") # Apply decorator directly
+@require_permission("view_project", project_id_param="project_id")
 async def get_documents_by_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ):
-    # Inline permission or use decorator. For now, direct query after decorator (if active).
-    # The decorator should handle the permission check.
-    # If using the inner function pattern:
-    @require_permission("view_project", project_id_param="project_id_for_perm_check")
-    async def _get_documents_with_permission(project_id_for_perm_check: int, user: User, session: Session):
-        documents = session.query(Document).filter(Document.project_id == project_id_for_perm_check).all()
-        return [DocumentResponse.model_validate(doc) for doc in documents]
-
-    return await _get_documents_with_permission(project_id, current_user, db)
+    documents = db.query(Document).filter(Document.project_id == project_id).all()
+    return documents
 
 
 @router.get(
     "/project/{project_id}/with-status",
-    response_model=List[DocumentWithStatusResponse], # Assuming this DTO exists
-    summary="Get documents by project ID with processing status",
-    description="Retrieve all documents for a project with their processing status."
+    response_model=List[DocumentWithStatusResponse],
+    summary="Get documents by project ID with their processing status",
+    description="Retrieve all document uploads for a project, showing their current processing status and links to processed documents if available."
 )
-# @require_permission("view_project", project_id_param="project_id") # Apply decorator
+@require_permission("view_project", project_id_param="project_id")
 async def get_documents_with_status_by_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
     document_service: DocumentService = Depends(get_document_service)
 ):
-    @require_permission("view_project", project_id_param="project_id_for_perm_check")
-    async def _get_docs_with_status_permission(project_id_for_perm_check: int, user: User, doc_service: DocumentService):
-        docs_with_status = await doc_service.get_documents_with_status(project_id_for_perm_check)
-        # Ensure docs_with_status items conform to DocumentWithStatusResponse
-        return [DocumentWithStatusResponse.model_validate(doc) for doc in docs_with_status]
+    docs_with_status_dicts = await document_service.get_documents_with_status(project_id)
+    return [DocumentWithStatusResponse.model_validate(d) for d in docs_with_status_dicts]
 
-    return await _get_docs_with_status_permission(project_id, current_user, document_service)
 
-# --- New Qdrant Search Endpoint ---
 @router.post(
     "/search_chunks",
     response_model=SearchResponse,
-    summary="Search document chunks",
-    description="Search for relevant document chunks using vector similarity search in Qdrant."
+    summary="Search document chunks via Qdrant",
+    description="Search for relevant document chunks using vector similarity search."
 )
 async def search_document_chunks(
     request: SearchQueryRequest,
-    current_user: User = Depends(get_current_user), # For permission checks
+    current_user: User = Depends(get_current_user),
     qdrant_service: QdrantService = Depends(get_qdrant_service),
-    db: Session = Depends(get_db_session) # If needed for additional permission checks
+    db: Session = Depends(get_db_session)
 ):
-    # Permission check: User must have access to the project_id if specified
     if request.project_id:
-        # Example permission check (adapt to your system)
-        # You would typically use your @require_permission decorator or a similar service method
-        # For demonstration, a placeholder check:
         project = db.query(Project).filter(Project.id == request.project_id).first()
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Project {request.project_id} not found.")
-        
-        # Your actual permission check, e.g., has_permission(user, "view_project", request.project_id)
-        # This is a simplified check; replace with your robust permission logic.
-        # Let's assume a simple check for brevity or that it's handled by a decorator if you adapt one.
-        # For example:
-        # await require_permission_manual_check("view_project", project_id=request.project_id, user=current_user, db=db)
+        # TODO: Add permission check: require_permission("view_project", project_id=request.project_id)
 
     try:
         search_hits = qdrant_service.search_chunks(
@@ -191,7 +301,7 @@ async def search_document_chunks(
         for hit in search_hits:
             payload = hit.payload if hit.payload else {}
             results.append(SearchResultItem(
-                chunk_id=str(hit.id), # Qdrant ID can be int or UUID string
+                chunk_id=str(hit.id),
                 document_id=payload.get("document_id"),
                 project_id=payload.get("project_id"),
                 file_name=payload.get("file_name", "N/A"),
@@ -202,7 +312,8 @@ async def search_document_chunks(
         return SearchResponse(results=results)
         
     except RuntimeError as e: # Catch specific errors from QdrantService
+        logger.error(f"Runtime error during Qdrant search: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Search service error: {e}")
     except Exception as e:
-        # Log the exception e
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred during search: {e}")
+        logger.error(f"Unexpected error during Qdrant search: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during search.")

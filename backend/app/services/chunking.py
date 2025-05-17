@@ -139,26 +139,11 @@ def _split_markdown_by_headers(
 
 def chunk_markdown(
     markdown_text: str,
-    split_level: int = 2, # e.g., 2 for ##
+    split_level: int = 2,
     max_chunk_size: int = 1000,
-    chunk_overlap: int = 50, # Overlap for recursive fallback
-    source_document: Optional[str] = None
+    chunk_overlap: int = 50,
+    source_document: Optional[str] = None # This is document_id as string
 ) -> List[Dict]:
-    """
-    Chunks a Markdown document with header awareness and size control.
-
-    Args:
-        markdown_text: The input Markdown string.
-        split_level: The header level to split by (e.g., 1 for #, 2 for ##).
-        max_chunk_size: The maximum character length for a chunk.
-        chunk_overlap: Character overlap for recursive splitting fallback.
-        source_document: Optional identifier for the source document.
-
-    Returns:
-        A list of dictionaries, where each dict represents a chunk
-        with 'text' and 'metadata' keys.
-    """
-    # 1. Preserve Atomic Units (Code Blocks)
     code_block_pattern = re.compile(r"(^```.*?^```)", re.MULTILINE | re.DOTALL)
     code_blocks = {}
     placeholder_template = "CODEBLOCK_PLACEHOLDER_{}"
@@ -170,62 +155,72 @@ def chunk_markdown(
         return placeholder
 
     processed_text = code_block_pattern.sub(replace_code_block, markdown_text)
-
-    # 2. Primary Split by Headers
     primary_chunks = _split_markdown_by_headers(processed_text, split_level)
-
     final_chunks = []
     chunk_seq_id = 0
 
-    # 3. Secondary Split / Size Control Fallback
     for headers, text_block in primary_chunks:
         if not text_block.strip():
             continue
 
         base_metadata = {"headers": {f"h{k}": v for k, v in headers.items() if v}}
         if source_document:
-            base_metadata["source_document"] = source_document
+            base_metadata["source_document_id"] = source_document # Store original doc_id here
+            base_metadata["chunk_sequence"] = chunk_seq_id # Store sequence here
 
-        # Check if the primary chunk needs further splitting
-        if len(text_block) <= max_chunk_size:
-             # Re-insert code blocks before adding
-             final_text = text_block
-             for placeholder, code in code_blocks.items():
-                 if placeholder in final_text:
-                     final_text = final_text.replace(placeholder, code)
+        # Re-insert code blocks before further splitting or finalizing
+        # This needs to happen before _split_text_recursive if text_block is large
+        # and before final_chunks.append if text_block is small.
+        
+        # Temporarily restore code blocks for accurate length check and splitting
+        temp_restored_text_block = text_block
+        for placeholder, code in code_blocks.items():
+            if placeholder in temp_restored_text_block:
+                temp_restored_text_block = temp_restored_text_block.replace(placeholder, code)
 
-             chunk_metadata = base_metadata.copy()
-             chunk_metadata["chunk_id"] = f"{source_document or 'doc'}_{chunk_seq_id}"
-             final_chunks.append({"text": final_text, "metadata": chunk_metadata})
-             chunk_seq_id += 1
+        if len(temp_restored_text_block) <= max_chunk_size:
+            final_text = temp_restored_text_block # Already restored
+            
+            chunk_metadata = base_metadata.copy()
+            # --- MODIFICATION FOR QDRANT POINT ID ---
+            # Generate a UUID for the chunk_id (which will be DocumentChunk.id and Qdrant point ID)
+            chunk_metadata["chunk_id"] = str(uuid.uuid4())
+            # --- END MODIFICATION ---
+            
+            final_chunks.append({"text": final_text, "metadata": chunk_metadata})
+            chunk_seq_id += 1
         else:
-            # Apply recursive splitting with fallback separators
-            # Prioritize paragraphs, then lines, then recursive character split
-            separators = ["\n\n", "\n", ". ", "! ", "? ", " ", ""] # Include common sentence enders and space
-            sub_chunks = _split_text_recursive(
-                text_block, max_chunk_size, separators, chunk_overlap
+            # If splitting recursively, pass the text_block *without* code blocks restored yet,
+            # as _split_text_recursive works on plain text.
+            separators = ["\n\n", "\n", ". ", "! ", "? ", " ", ""]
+            sub_chunks_text_only = _split_text_recursive(
+                text_block, max_chunk_size, separators, chunk_overlap # Pass original text_block with placeholders
             )
 
-            for sub_chunk_text in sub_chunks:
-                # Re-insert code blocks into the sub-chunk
-                final_sub_text = sub_chunk_text
+            for sub_chunk_text_placeholder in sub_chunks_text_only:
+                # Restore code blocks into the sub-chunk
+                final_sub_text = sub_chunk_text_placeholder
                 for placeholder, code in code_blocks.items():
-                     if placeholder in final_sub_text:
-                         final_sub_text = final_sub_text.replace(placeholder, code)
+                    if placeholder in final_sub_text:
+                        final_sub_text = final_sub_text.replace(placeholder, code)
 
                 chunk_metadata = base_metadata.copy()
-                chunk_metadata["chunk_id"] = f"{source_document or 'doc'}_{chunk_seq_id}"
+                # --- MODIFICATION FOR QDRANT POINT ID ---
+                chunk_metadata["chunk_id"] = str(uuid.uuid4()) # New UUID for each sub-chunk
+                # Update sequence for sub-chunks if needed, or rely on order
+                chunk_metadata["sub_chunk_sequence_within_block"] = chunk_seq_id # Or a more granular sequence
+                # --- END MODIFICATION ---
+
                 final_chunks.append({"text": final_sub_text, "metadata": chunk_metadata})
-                chunk_seq_id += 1
+                chunk_seq_id += 1 # Increment for each sub-chunk or manage sequence differently
 
-    # Final pass to ensure no placeholders remain (e.g., if a code block was the only content)
-    # This is less likely with the current logic but good for robustness
-    for chunk in final_chunks:
-         for placeholder, code in code_blocks.items():
-             if placeholder in chunk["text"]:
-                 chunk["text"] = chunk["text"].replace(placeholder, code)
-
+    # Final pass to ensure no placeholders remain (should be handled above)
+    # for chunk in final_chunks:
+    #      for placeholder, code in code_blocks.items():
+    #          if placeholder in chunk["text"]:
+    #              chunk["text"] = chunk["text"].replace(placeholder, code)
     return final_chunks
+
 
 def save_chunks_to_database(
     db: Session,
@@ -233,53 +228,40 @@ def save_chunks_to_database(
     document_id: int,
     project_id: int,
     file_name: str,
-    file_hash: str
-) -> List[str]:
-    """
-    Saves document chunks to the database.
-    
-    Args:
-        db: SQLAlchemy database session
-        chunks: List of chunk dictionaries from chunk_markdown function
-        document_id: ID of the document these chunks belong to
-        project_id: ID of the project these chunks belong to
-        file_name: Name of the source file
-        file_hash: Hash of the source file
-        
-    Returns:
-        List of chunk IDs that were saved to the database
-    """
+    file_hash: str # This is the original file_hash
+) -> List[str]: # Returns list of DocumentChunk.id (which are now UUIDs)
     saved_chunk_ids = []
     
-    for chunk in chunks:
-        # Generate a unique chunk ID if not already present
-        chunk_id = chunk["metadata"].get("chunk_id")
+    for chunk_data in chunks:
+        # The chunk_id is now a UUID generated in chunk_markdown
+        chunk_id = chunk_data["metadata"].get("chunk_id")
         if not chunk_id:
-            # Create a deterministic ID based on content and document
-            content_hash = hashlib.sha256(chunk["text"].encode()).hexdigest()[:16]
-            chunk_id = f"{file_hash[:8]}_{content_hash}"
-            chunk["metadata"]["chunk_id"] = chunk_id
+            # This should not happen if chunk_markdown always assigns a UUID
+            # As a fallback, generate one here, but it's better if chunk_markdown is robust
+            chunk_id = str(uuid.uuid4())
+            chunk_data["metadata"]["chunk_id"] = chunk_id # Ensure it's in metadata for consistency
         
         # Create a new database record
         db_chunk = DocumentChunk(
-            id=chunk_id,
+            id=chunk_id, # This is now a UUID string
             project_id=project_id,
             document_id=document_id,
             file_name=file_name,
-            hash=file_hash,
-            chunk_metadata=chunk["metadata"]
+            hash=file_hash, # Store the original file's hash for reference
+            chunk_metadata=chunk_data["metadata"] # This includes source_document_id, chunk_sequence etc.
         )
         
-        # Add the chunk text directly to the metadata for storage
-        # This assumes the metadata field can store the text content
-        db_chunk.chunk_metadata["content"] = chunk["text"]
+        # Add the chunk text directly to the metadata for storage in DocumentChunk
+        # This is already part of the design.
+        # db_chunk.chunk_metadata["content"] = chunk_data["text"] # This is redundant if text is in Qdrant payload
+
+        # The actual text of the chunk is in chunk_data["text"]
+        # It will be put into the Qdrant payload by the consumer.
+        # The DocumentChunk.chunk_metadata will store the metadata from chunk_markdown.
         
-        # Add to session and commit
         db.add(db_chunk)
         saved_chunk_ids.append(chunk_id)
     
-    # Commit all chunks in a single transaction
-    db.commit()
+    db.commit() # Commit all chunks for this document in a single transaction
     
     return saved_chunk_ids
-

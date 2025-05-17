@@ -38,7 +38,6 @@ class Project(Base):
     chat_projects = relationship("ChatProject", back_populates="project")
     document_uploads = relationship("DocumentUpload", back_populates="project")
     documents = relationship("Document", back_populates="project")
-    processing_tasks = relationship("ProcessingTask", back_populates="project")
     document_chunks = relationship("DocumentChunk", back_populates="project")
     project_permissions = relationship("ProjectPermission", back_populates="project")
 
@@ -103,53 +102,37 @@ class DocumentUpload(Base):
     file_hash = Column(String(64), nullable=False)
     file_size = Column(BigInteger, nullable=False)
     content_type = Column(String(100), nullable=False)
-    temp_path = Column(String(255), nullable=False)
+    temp_path = Column(String(255), nullable=False) # Path to the initially uploaded file
     created_at = Column(DateTime, default=datetime.now(UTC))
-    status = Column(String(50), default="pending")
+    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC)) # For consumer updates
+    status = Column(String(50), default="pending") # e.g., pending, queued, processing, completed, error
     error_message = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True) # Link to the processed Document
 
     project = relationship("Project", back_populates="document_uploads")
     user = relationship("User", back_populates="document_uploads")
-    processing_tasks = relationship("ProcessingTask", back_populates="document_upload")
+    document = relationship("Document", back_populates="document_upload_entry") # New relationship
 
 # Documents Table
 class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    file_path = Column(String(255), nullable=False)
+    file_path = Column(String(255), nullable=False) # Permanent storage path (S3 or local)
     file_name = Column(String(255), nullable=False)
     file_size = Column(Integer)
     content_type = Column(String(100))
     file_hash = Column(String(64))
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.now(UTC))
+    created_at = Column(DateTime, default=datetime.now(UTC)) # When document record (post-processing) is created
     updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
-    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False) # User who initiated the upload
 
     project = relationship("Project", back_populates="documents")
     uploaded_by_user = relationship("User", back_populates="documents")
-    processing_tasks = relationship("ProcessingTask", back_populates="document")
     document_chunks = relationship("DocumentChunk", back_populates="document")
-
-# Processing Tasks Table
-class ProcessingTask(Base):
-    __tablename__ = "processing_tasks"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    document_id = Column(Integer, ForeignKey("documents.id"))
-    status = Column(String(50))
-    error_message = Column(Text)
-    created_at = Column(DateTime, default=datetime.now(UTC))
-    updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
-    document_upload_id = Column(Integer, ForeignKey("document_uploads.id"))
-    initiated_by = Column(Integer, ForeignKey("users.id"))
-
-    project = relationship("Project", back_populates="processing_tasks")
-    document = relationship("Document", back_populates="processing_tasks")
-    document_upload = relationship("DocumentUpload", back_populates="processing_tasks")
+    document_upload_entry = relationship("DocumentUpload", back_populates="document", uselist=False) # Link back to DocumentUpload
 
 # Document Chunks Table
 class DocumentChunk(Base):
@@ -157,12 +140,12 @@ class DocumentChunk(Base):
 
     id = Column(String(64), primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    file_name = Column(String(255), nullable=False)
-    hash = Column(String(64), nullable=False)
+    file_name = Column(String(255), nullable=False) # Original file name for context
+    hash = Column(String(64), nullable=False) # Hash of the original file
     created_at = Column(DateTime, default=datetime.now(UTC))
     updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
-    chunk_metadata = Column(JSON)
+    chunk_metadata = Column(JSON) # Includes text, original chunk metadata, etc.
 
     project = relationship("Project", back_populates="document_chunks")
     document = relationship("Document", back_populates="document_chunks")
