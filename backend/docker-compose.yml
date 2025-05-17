@@ -1,6 +1,6 @@
 services:
   db:
-    image: pgvector/pgvector:pg17
+    image: postgres:17
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-rag}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag}
@@ -36,6 +36,24 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - rag-network
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: always
+    container_name: qdrant
+    ports:
+      - 6333:6333
+      - 6334:6334
+    expose:
+      - 6333
+      - 6334
+      - 6335
+    configs:
+      - source: qdrant_config
+        target: /qdrant/config/production.yaml
+    volumes:
+      - qdrant_data:/var/lib/qdrant
+    networks:
+      - rag-network
 
 networks:
   rag-network:
@@ -44,3 +62,8 @@ volumes:
   rag_data:
   minio_data:
   rabbitmq_data:
+  qdrant_data:
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO

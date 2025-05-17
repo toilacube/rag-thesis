@@ -1,26 +1,25 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
-import os
-from dotenv import load_dotenv
-from app.config.config import getConfig
 import logging
+from app.config.config import getConfig # Import your getConfig
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (done by getConfig now)
+# load_dotenv() # No longer needed here if getConfig handles it
 
-#  ensure that even engine-level logs are set to WARNING level, which will hide most of the query details.
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://rag:rag@localhost:5432/ragdb")
+# Get the current configuration object
+current_config = getConfig()
+DATABASE_URL = current_config.SQLALCHEMY_DATABASE_URI # Use the URI from config
 
 Base = declarative_base()
 
 # Synchronous Engine
 engine = create_engine(
     DATABASE_URL,
-    echo=False,  
-    poolclass=NullPool  # Disable connection pooling
+    echo=getattr(current_config, 'SQLALCHEMY_ECHO', False), # Optionally use SQLALCHEMY_ECHO from config
+    poolclass=NullPool
 )
 
 # Synchronous Session Factory

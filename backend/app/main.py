@@ -3,8 +3,6 @@ import sqlalchemy
 from app.core.api_reponse import api_response
 from app.core.exception_handler import register_error_handlers
 from app.api.api import main_router
-from app.config.config import config
-import os
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
