@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -49,6 +50,27 @@ class Config:
     # Dimension for all-MiniLM-L6-v2 is 384. If you change model, update this.
     EMBEDDING_DIMENSION: int = int(os.environ.get("EMBEDDING_DIMENSION", 384))
 
+        # --- LLM Chat Provider Configuration ---
+    CHAT_PROVIDER: str = os.environ.get("CHAT_PROVIDER", "ollama").lower() # Default to ollama
+
+    # OpenAI Configuration
+    OPENAI_API_KEY: Optional[str] = os.environ.get("OPENAI_API_KEY")
+    OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
+
+    # Gemini Configuration (via OpenAI compatible API)
+    GEMINI_API_KEY: Optional[str] = os.environ.get("GEMINI_API_KEY")
+    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-pro") # Example model
+    # For Google AI Studio, base_url is often specific per model type
+    GEMINI_API_BASE_URL: str = os.environ.get("GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+
+
+    # Ollama Configuration (reusing existing where possible)
+    OLLAMA_API_BASE: str = os.environ.get("OLLAMA_API_BASE", "http://127.0.0.1:11434")
+    OLLAMA_CHAT_MODEL: str = os.environ.get("OLLAMA_CHAT_MODEL", os.environ.get("OLLAMA_MODEL", "llama3.2:latest"))
+    
+    # Default LLM settings
+    LLM_DEFAULT_TEMPERATURE: float = float(os.environ.get("LLM_DEFAULT_TEMPERATURE", 0.7))
+    LLM_DEFAULT_MAX_TOKENS: int = int(os.environ.get("LLM_DEFAULT_MAX_TOKENS", 1500))
 
 class DevelopmentConfig(Config):
     DEBUG = True

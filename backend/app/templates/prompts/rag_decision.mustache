@@ -1,0 +1,27 @@
+Given the following conversation history and the latest user question, determine if retrieving information from a knowledge base (vector search) is necessary to provide a comprehensive and accurate answer.
+
+Respond with ONLY a JSON object with two keys: "need_rag" (boolean) and "reason" (string, explaining your decision briefly).
+
+Conversation History (if any):
+{{#history}}
+- {{role}}: {{content}}
+{{/history}}
+{{^history}}
+No previous conversation history.
+{{/history}}
+
+Latest User Question:
+"{{user_question}}"
+
+Consider the following:
+- Is the question asking for specific factual information that might be in a document?
+- Is the question about a topic likely covered in the project's knowledge base?
+- Can the question be answered with general knowledge, or does it require specific context?
+- Avoid RAG for simple greetings, chit-chat, or very general questions unless they hint at needing specific data.
+
+Your JSON response:
+```json
+{
+  "need_rag": boolean,
+  "reason": "string"
+}

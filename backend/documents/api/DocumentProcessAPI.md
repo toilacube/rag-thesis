@@ -1,8 +1,26 @@
+---
+FILE: documents/api/DocumentProcessAPI.md
+---
+```markdown
 # Document Processing API Documentation
 
-**- All the api will have a prefix /api - http://localhost:8000/api**
+**- All API endpoints have a prefix `/api` - e.g., `http://localhost:8000/api/document`**
+**- All requests requiring authentication must include an `Authorization: Bearer YOUR_ACCESS_TOKEN` header.**
 
-## Document Processing API
+## Summary of Changes from Previous API
+
+The document processing API has been significantly refactored to use an asynchronous processing model with RabbitMQ.
+
+**Key Differences from the Old API:**
+
+1.  **Removal of `/document/process` Endpoint:** Previously, document processing was a two-step process: first upload, then a separate call to `/document/process` with upload IDs to initiate processing. This endpoint is **no longer needed**.
+2.  **Automatic Queuing:** Document processing is now automatically queued via RabbitMQ immediately after a successful upload through the `/document/upload` endpoint.
+3.  **Status Code for Upload:** The `/document/upload` endpoint now returns a `202 ACCEPTED` status code, indicating the files have been accepted for asynchronous processing, rather than a `201 CREATED` implying immediate completion.
+4.  **Simplified Status Tracking:** The `DocumentUpload` record itself now tracks the lifecycle (e.g., `queued`, `processing`, `completed`, `error`), making the `ProcessingTask` model obsolete.
+
+The API is now more streamlined, providing a more responsive experience for file uploads and a more robust backend processing system.
+
+## Current Document Processing API
 
 ### Base URL
 
@@ -10,209 +28,241 @@ All endpoints are prefixed with `/api`. For example, `http://localhost:8000/api/
 
 ### Endpoints
 
-#### 1. Upload and Process Documents
+#### 1. Upload Documents for Asynchronous Processing
 
 **POST** `/document/upload`
 
-Uploads and processes multiple document files for a project. The files will be validated, saved, and queued for asynchronous processing.
+Uploads one or more document files to a specified project. The files are validated, saved temporarily, and then a message is published to a RabbitMQ queue to trigger asynchronous processing (text extraction, chunking, embedding, and storage).
 
 **Request Body:**
 
-- Form data:
-  - `files`: List of document files to upload (PDF, DOCX, DOC, TXT, MD, XLS, XLSX)
-  - `project_id`: ID of the project to upload the documents to
+*   Form data:
+    *   `files`: List of document files to upload (PDF, DOCX, DOC, TXT, MD, XLS, XLSX).
+    *   `project_id`: ID of the project to upload the documents to.
 
 **Curl Example:**
-
 ```bash
-curl -X POST http://localhost:8000/api/document/upload \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
-  -F "files=@/path/to/your/file1.pdf" \
-  -F "files=@/path/to/your/file2.docx" \
-  -F "project_id=1"
+curl -X POST 'http://localhost:8000/api/document/upload' \
+  -H 'Authorization: Bearer YOUR_ACCESS_TOKEN' \
+  -F 'files=@/path/to/your/file1.pdf' \
+  -F 'files=@/path/to/your/file2.docx' \
+  -F 'project_id=1'
 ```
 
-**Response:**
-
+**Success Response (`202 ACCEPTED`):**
+A list of results, one for each attempted file upload.
 ```json
 [
   {
     "file_name": "file1.pdf",
-    "status": "pending",
+    "status": "queued", // Indicates successfully queued for processing
     "upload_id": 1,
-    "is_exist": false
+    "document_id": null,
+    "is_exist": false,
+    "error": null
   },
   {
-    "file_name": "file2.docx",
-    "status": "exists",
-    "document_id": 2,
+    "file_name": "existing_document.docx",
+    "status": "exists", // Document with same content hash already processed for this project
     "upload_id": null,
-    "is_exist": true
+    "document_id": 101, // ID of the existing processed document
+    "is_exist": true,
+    "error": null
   },
   {
-    "file_name": "file3.txt",
+    "file_name": "too_large.txt",
     "status": "error",
-    "error": "File size exceeds maximum allowed (50MB)",
     "upload_id": null,
-    "is_exist": false
+    "document_id": null,
+    "is_exist": false,
+    "error": "File size exceeds maximum allowed (50MB)"
   }
 ]
 ```
-
-**Status Values:**
-
-- `pending`: Document has been validated and queued for processing
-- `exists`: Document with the same hash already exists in the project
-- `error`: Error occurred during validation or upload
+**`DocumentUploadResult` Fields:**
+*   `file_name` (string): The name of the uploaded file.
+*   `status` (string): The initial status of the upload attempt:
+    *   `"queued"`: File validated and successfully sent to the processing queue.
+    *   `"`exists`"`: A document with the same content hash already exists in the project. No new processing will occur.
+    *   `"`error`"`: An error occurred during initial validation (e.g., file type, size) or when trying to queue the file.
+*   `upload_id` (integer, optional): The ID of the `DocumentUpload` record created if the file was queued or an error occurred after record creation. Null if it was an "exists" case or pre-queue validation error.
+*   `document_id` (integer, optional): If `status` is `"exists"`, this is the ID of the already processed `Document`.
+*   `is_exist` (boolean): True if a document with the same content hash already exists for this project.
+*   `error` (string, optional): An error message if the `status` is `"error"`.
 
 ---
 
-#### 2. Get Document Processing Status
+#### 2. Test Document Processing with String Content
 
-**GET** `/document/upload/status`
+**POST** `/document/test-upload-string`
 
-Retrieves the processing status for a list of document uploads.
+Accepts document content as a string, saves it to a temporary file, and queues it for asynchronous processing via RabbitMQ. This endpoint is primarily intended for testing the processing pipeline without actual file handling on the client-side.
 
-**Query Parameters:**
-
-- `upload_ids`: List of document upload IDs to check (comma-separated)
-
-**Curl Example:**
-
-```bash
-curl -X GET "http://localhost:8000/api/document/upload/status?upload_ids=1,2,3" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-**Response:**
-
+**Request Body:** `DocumentUploadStringRequest` schema.
 ```json
 {
-  "1": {
-    "status": "completed",
-    "file_name": "document1.pdf",
-    "task_id": 1,
-    "task_status": "completed",
-    "document_id": 1
-  },
-  "2": {
-    "status": "processing",
-    "file_name": "document2.docx",
-    "task_id": 2,
-    "task_status": "processing"
-  },
-  "3": {
-    "status": "error",
-    "file_name": "invalid.xyz",
-    "error": "Unsupported file type: application/octet-stream",
-    "task_id": 3,
-    "task_status": "error"
-  }
+  "project_id": 1,
+  "file_name": "my_test_doc.md",
+  "document_content": "# My Test Document\n\nThis is the content.",
+  "content_type": "text/markdown"
 }
 ```
 
-**Status Values:**
+**Curl Example:**
+```bash
+curl -X POST 'http://localhost:8000/api/document/test-upload-string' \
+  -H 'Authorization: Bearer YOUR_ACCESS_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "project_id": 1,
+    "file_name": "test_from_string.txt",
+    "document_content": "This is test content sent as a string.",
+    "content_type": "text/plain"
+  }'
+```
 
-- `pending`: Document is waiting to be processed
-- `processing`: Document is currently being processed
-- `completed`: Document has been successfully processed
-- `error`: Error occurred during processing
-- `not_found`: Specified upload ID was not found
+**Success Response (`202 ACCEPTED`):**
+A single `DocumentUploadResult` object.
+```json
+{
+  "file_name": "test_from_string.txt",
+  "status": "queued",
+  "upload_id": 2,
+  "document_id": null,
+  "is_exist": false,
+  "error": null
+}
+```
+*(Response structure is the same as for `/document/upload` but for a single "file")*
 
 ---
 
-#### 3. Get Documents with Processing Status
+#### 3. Get Document Upload Status
+
+**GET** `/document/upload/status`
+
+Retrieves the current processing status for a list of document uploads using their `upload_id`s.
+
+**Query Parameters:**
+*   `upload_ids` (List[int], required): A list of `DocumentUpload` IDs to check.
+    *   Example: `?upload_ids=1&upload_ids=2&upload_ids=3`
+
+**Curl Example:**
+```bash
+curl -X GET 'http://localhost:8000/api/document/upload/status?upload_ids=1&upload_ids=2' \
+  -H 'Authorization: Bearer YOUR_ACCESS_TOKEN'
+```
+
+**Success Response (`200 OK`):**
+A dictionary where keys are the requested `upload_id`s and values are `ProcessingStatusResponse` objects.
+```json
+{
+  "1": {
+    "upload_id": 1,
+    "file_name": "file1.pdf",
+    "upload_status": "completed", // Status from DocumentUpload record
+    "upload_error": null,
+    "document_id": 102 // ID of the processed Document if 'completed'
+  },
+  "2": {
+    "upload_id": 2,
+    "file_name": "file_being_processed.docx",
+    "upload_status": "processing",
+    "upload_error": null,
+    "document_id": 103 // document_id might be set once Document record is created
+  },
+  "99": { // Example for an ID that was not found
+    "status": "not_found",
+    "detail": "DocumentUpload ID not found."
+  }
+}
+```
+**`ProcessingStatusResponse` Fields:**
+*   `upload_id` (integer): The ID of the `DocumentUpload` record.
+*   `file_name` (string): The original name of the uploaded file.
+*   `upload_status` (string): The current status of this upload (e.g., `queued`, `processing`, `completed`, `error`).
+*   `upload_error` (string, optional): Error message if `upload_status` is `error`.
+*   `document_id` (integer, optional): The ID of the final `Document` record if processing is complete or the `Document` record has been created.
+
+---
+
+#### 4. Get Documents by Project ID with Processing Status
 
 **GET** `/document/project/{project_id}/with-status`
 
-Retrieves all documents for a project along with their processing status.
+Retrieves all document uploads associated with a specific project, along with their current processing status and details of the processed document if available.
 
 **Path Parameters:**
-
-- `project_id`: ID of the project to get documents for
+*   `project_id` (integer, required): ID of the project.
 
 **Curl Example:**
-
 ```bash
-curl -X GET "http://localhost:8000/api/document/project/1/with-status" \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+curl -X GET 'http://localhost:8000/api/document/project/1/with-status' \
+  -H 'Authorization: Bearer YOUR_ACCESS_TOKEN'
 ```
 
-**Response:**
-
+**Success Response (`200 OK`):**
+A list of `DocumentWithStatusResponse` objects.
 ```json
 [
   {
-    "id": 1,
-    "file_path": "s3://documents/project_1/a1b2c3d4e5f6.../sample.pdf",
-    "file_name": "sample.pdf",
+    "id": 102, // Document ID (if processed)
+    "file_path": "s3://your-bucket/project_1/hash123/file1.pdf",
+    "file_name": "file1.pdf", // Original upload filename
     "file_size": 123456,
     "content_type": "application/pdf",
-    "file_hash": "a1b2c3d4e5f6...",
+    "file_hash": "hash123...",
     "project_id": 1,
-    "created_at": "2025-04-13T10:30:00",
-    "updated_at": "2025-04-13T10:30:00",
-    "uploaded_by": 1,
-    "processing_status": "completed",
-    "error_message": null
+    "created_at": "2025-05-18T14:30:00Z", // Document creation time
+    "updated_at": "2025-05-18T14:30:00Z",
+    "uploaded_by": 123,
+    "processing_status": "completed", // Derived from DocumentUpload status
+    "error_message": null,
+    "upload_id": 1 // Corresponding DocumentUpload ID
   },
   {
-    "id": 2,
-    "file_path": "s3://documents/project_1/g7h8i9j0k1l2.../report.docx",
-    "file_name": "report.docx",
-    "file_size": 234567,
-    "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "file_hash": "g7h8i9j0k1l2...",
+    "id": null, // No Document ID yet
+    "file_path": null,
+    "file_name": "file_in_queue.txt",
+    "file_size": 5000,
+    "content_type": "text/plain",
+    "file_hash": "hash456...",
     "project_id": 1,
-    "created_at": "2025-04-13T11:45:00",
-    "updated_at": "2025-04-13T11:45:00",
-    "uploaded_by": 1,
-    "processing_status": "error",
-    "error_message": "Error in document chunking: Invalid document format"
+    "created_at": "2025-05-18T15:00:00Z", // DocumentUpload creation time
+    "updated_at": "2025-05-18T15:00:00Z",
+    "uploaded_by": 123,
+    "processing_status": "queued",
+    "error_message": null,
+    "upload_id": 3
   }
 ]
 ```
+**`DocumentWithStatusResponse` Fields:**
+*   Many fields are from the `Document` record if processing is complete (`id`, `file_path`, etc.).
+*   If processing is not yet complete or failed, these fields might be `null`, and information is taken from the `DocumentUpload` record (`file_name`, `file_size` from upload, etc.).
+*   `processing_status` (string): The current lifecycle status of the upload (e.g., `queued`, `processing`, `completed`, `error`).
+*   `error_message` (string, optional): Error message if processing failed.
+*   `upload_id` (integer): The ID of the `DocumentUpload` entry this status pertains to.
 
-### Processing Workflow
+### Other Document Endpoints (Unchanged by Processing Refactor)
 
-The document processing follows this sequence:
+These endpoints operate on **successfully processed documents** and their core functionality remains the same:
 
-1. **Upload Phase**:
+*   **`GET /document/{document_id}`**: Get a specific processed document by its ID.
+*   **`GET /document/project/{project_id}`**: Get all processed documents for a project.
+*   **`POST /document/search_chunks`**: Search for chunks within processed documents.
 
-   - Document files are uploaded to the server
-   - Each file is validated for format and size
-   - A `DocumentUpload` record is created with status "pending"
-   - Upload results are returned to the client immediately
+### File Type Support
 
-2. **Processing Phase** (asynchronous):
+The document upload endpoints support: PDF, DOCX, DOC, TXT, MD, XLS, XLSX.
+Maximum file size: 50MB.
 
-   - A `ProcessingTask` is created for each valid upload
-   - The task status is set to "processing"
-   - The document is stored permanently (local filesystem or S3/MinIO)
-   - A `Document` record is created with the permanent file path
-   - The processor performs chunking and embedding generation (see CHUNKING.md)
-   - The task status is updated to "completed" when finished
+### Error Responses (General for Uploads)
 
-3. **Status Checking**:
-   - Clients can check processing status using the upload IDs
-   - Completed documents can be retrieved via document endpoints
+*   `400 Bad Request`: Invalid input, unsupported file type, file too large.
+*   `401 Unauthorized`: Missing or invalid authentication token.
+*   `403 Forbidden`: User does not have permission (e.g., "add\_document" for the project).
+*   `404 Not Found`: Project ID not found.
+*   `500 Internal Server Error`: Unexpected server error during the synchronous part of the upload (e.g., failure to write temp file, initial DB error). Errors during asynchronous processing will be reflected in the `DocumentUpload` status.
+```
 
-### Error Responses
-
-**400 Bad Request**
-
-- When an unsupported file type is uploaded
-- When file size exceeds maximum allowed (50MB)
-- When required parameters are missing
-
-**403 Forbidden**
-
-- When the user doesn't have the required permission for the project
-
-**404 Not Found**
-
-- When a document, project, or upload ID cannot be found
-
-**500 Internal Server Error**
-
-- When an unexpected error occurs during document processing
