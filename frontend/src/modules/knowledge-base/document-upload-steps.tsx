@@ -1,692 +1,478 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { FileIcon, defaultStyles } from "react-file-icon";
 import { Button } from "@/components/button";
 import { Card } from "@/components/card";
 import { Progress } from "@/components/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/tabs";
-import { Input } from "@/components/input";
-import { Label } from "@/components/label";
+// Tabs and Accordion are removed as per "ignore preview logic" and simplified steps
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/tabs";
+// import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/accordion";
+import { Input } from "@/components/input"; // Potentially for future settings, not for chunking now
+import { Label } from "@/components/label"; // Potentially for future settings
 import { useToast } from "@/components/use-toast";
 import {
   FiLoader,
   FiUpload,
   FiX,
-  FiSettings,
-  FiFileText,
+  FiSettings, // Might be repurposed or removed
+  FiFileText, // Might be repurposed or removed
+  FiCheckCircle,
+  FiAlertCircle,
+  FiClock,
+  FiHelpCircle,
 } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import { api, ApiError } from "@/lib/api";
 import { useDropzone } from "react-dropzone";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/select";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/accordion";
+import { Badge } from "@/components/badge";
+
+// --- START: TypeScript Interfaces (can be moved to a types file) ---
+export interface DocumentUploadResult {
+  file_name: string;
+  status: "queued" | "exists" | "error";
+  upload_id: number | null;
+  document_id: number | null;
+  is_exist: boolean;
+  error: string | null;
+}
+
+export interface ProcessingStatusDetail {
+  upload_id: number;
+  file_name: string;
+  upload_status: "queued" | "processing" | "completed" | "error" | "not_found";
+  upload_error: string | null;
+  document_id: number | null;
+}
+
+export type ProcessingStatusResponseMap = Record<string, ProcessingStatusDetail | { status: "not_found"; detail: string }>;
+
+export interface UploadFileStatus {
+  id: string; // Unique ID for UI key, e.g., file.name + file.lastModified
+  file: File;
+  uiStatus:
+    | "pending_selection"
+    | "uploading_to_server"
+    | "awaits_processing"
+    | "processing_on_server"
+    | "completed_success"
+    | "completed_exists"
+    | "failed_upload"
+    | "failed_processing";
+  serverUploadId: number | null;
+  serverDocumentId: number | null;
+  errorMessage: string | null;
+  progress?: number;
+}
+// --- END: TypeScript Interfaces ---
 
 interface DocumentUploadStepsProps {
   projectId: number;
   onComplete?: () => void;
 }
 
-interface FileStatus {
-  file: File;
-  status:
-    | "pending"
-    | "uploading"
-    | "uploaded"
-    | "processing"
-    | "completed"
-    | "error";
-  uploadId?: number;
-  documentId?: number;
-  tempPath?: string;
-  error?: string;
-}
-
-interface UploadResult {
-  upload_id?: number;
-  document_id?: number;
-  file_name: string;
-  status: "exists" | "pending";
-  message?: string;
-  skip_processing: boolean;
-  temp_path?: string;
-}
-
-interface PreviewChunk {
-  content: string;
-  metadata: Record<string, any>;
-}
-
-interface PreviewResponse {
-  chunks: PreviewChunk[];
-  total_chunks: number;
-}
-
-interface TaskResponse {
-  tasks: Array<{
-    upload_id: number;
-    task_id: number;
-  }>;
-}
-
-interface TaskStatus {
-  document_id: number;
-  status: "pending" | "processing" | "completed" | "failed";
-  error_message?: string;
-}
-
-interface TaskStatusMap {
-  [key: number]: TaskStatus;
-}
-
-interface TaskStatusResponse {
-  [key: string]: TaskStatus;
-}
-
 export function DocumentUploadSteps({
-  projectId: projectId,
+  projectId,
   onComplete,
 }: DocumentUploadStepsProps) {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [files, setFiles] = useState<FileStatus[]>([]);
-  const [uploadedDocuments, setUploadedDocuments] = useState<{
-    [key: number]: PreviewResponse;
-  }>({});
-  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(
-    null
-  );
-  const [taskStatuses, setTaskStatuses] = useState<{
-    [key: number]: TaskStatus;
-  }>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [chunkSize, setChunkSize] = useState(1000);
-  const [chunkOverlap, setChunkOverlap] = useState(200);
+  const [files, setFiles] = useState<UploadFileStatus[]>([]);
+  const [isUploading, setIsUploading] = useState(false); // For the initial POST /upload
   const { toast } = useToast();
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isPollingActive, setIsPollingActive] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFiles((prev) => [
-      ...prev,
-      ...acceptedFiles.map((file) => ({
-        file,
-        status: "pending" as const,
-      })),
-    ]);
+    const newFileStatuses: UploadFileStatus[] = acceptedFiles.map((file) => ({
+      id: `${file.name}-${file.lastModified}`, // Simple unique ID
+      file,
+      uiStatus: "pending_selection" as const,
+      serverUploadId: null,
+      serverDocumentId: null,
+      errorMessage: null,
+      progress: 0,
+    }));
+    setFiles((prev) => {
+      // Avoid duplicates if user drops same file again
+      const existingIds = new Set(prev.map(f => f.id));
+      return [...prev, ...newFileStatuses.filter(nf => !existingIds.has(nf.id))];
+    });
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       "application/pdf": [".pdf"],
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        [".docx"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "application/msword": [".doc"],
       "text/plain": [".txt"],
       "text/markdown": [".md"],
+      "application/vnd.ms-excel": [".xls"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
     },
   });
 
-  const removeFile = (file: File) => {
-    setFiles((prev) => prev.filter((f) => f.file !== file));
+  const removeFile = (fileId: string) => {
+    setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
-  // Step 1: Upload files
-  const handleFileUpload = async () => {
-    const pendingFiles = files.filter((f) => f.status === "pending");
-    if (pendingFiles.length === 0) return;
+  const handleUploadAndInitiateProcessing = async () => {
+    const filesToUpload = files.filter((f) => f.uiStatus === "pending_selection");
+    if (filesToUpload.length === 0) return;
 
-    setIsLoading(true);
+    setIsUploading(true);
+    setFiles(prev => prev.map(f => f.uiStatus === "pending_selection" ? {...f, uiStatus: "uploading_to_server", progress: 10 } : f));
+
     try {
       const formData = new FormData();
-      pendingFiles.forEach((fileStatus) => {
+      filesToUpload.forEach((fileStatus) => {
         formData.append("files", fileStatus.file);
       });
-
       formData.append("project_id", projectId.toString());
 
-      const data = (await api.post(`/api/document/upload`, formData, {
-        headers: {},
-      })) as UploadResult[];
+      // Note: Axios or another library could provide upload progress
+      // For fetch, progress tracking is more involved. Assuming quick local uploads for now.
+      // If you need progress, you'd use XHR or a library.
+      // For simplicity, we'll just mark it as fully "uploading".
 
-      // Update file statuses
-      setFiles((prev) =>
-        prev.map((f) => {
-          const uploadResult = data.find((d) => d.file_name === f.file.name);
-          if (uploadResult) {
-            if (uploadResult.status === "exists") {
-              return {
-                ...f,
-                status: "completed",
-                documentId: uploadResult.document_id,
-                error: uploadResult.message,
-              };
-            } else {
-              return {
-                ...f,
-                status: "uploaded",
-                uploadId: uploadResult.upload_id,
-                tempPath: uploadResult.temp_path,
-              };
+      const results = (await api.post(
+        `/api/document/upload`,
+        formData,
+        { headers: {} } // Content-Type will be set automatically for FormData
+      )) as DocumentUploadResult[];
+
+      let allUploadsSuccessfulOrExist = true;
+      let hasQueuedFiles = false;
+
+      setFiles((prevFiles) =>
+        prevFiles.map((fs) => {
+          if (fs.uiStatus !== "uploading_to_server") return fs; // Only update files that were part of this batch
+
+          const result = results.find((r) => r.file_name === fs.file.name);
+          if (result) {
+            let newUiStatus: UploadFileStatus["uiStatus"] = fs.uiStatus;
+            if (result.status === "queued") {
+              newUiStatus = "awaits_processing";
+              hasQueuedFiles = true;
+            } else if (result.status === "exists") {
+              newUiStatus = "completed_exists";
+            } else if (result.status === "error") {
+              newUiStatus = "failed_processing"; // Or "failed_upload" if more granular
+              allUploadsSuccessfulOrExist = false;
             }
+            return {
+              ...fs,
+              uiStatus: newUiStatus,
+              serverUploadId: result.upload_id,
+              serverDocumentId: result.document_id,
+              errorMessage: result.error,
+              progress: 100, // Upload to server complete
+            };
           }
-          return f;
+          // If a file was in uploading_to_server state but no result, mark as error
+          allUploadsSuccessfulOrExist = false;
+          return { ...fs, uiStatus: "failed_upload", errorMessage: "Upload result missing from server response.", progress: 100 };
         })
       );
-
-      setCurrentStep(2);
-      toast({
-        title: "Upload successful",
-        description: `${data.length} files uploaded successfully.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Upload failed",
-        description:
-          error instanceof ApiError ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Step 2: Preview chunks
-  const handlePreview = async () => {
-    const selectedFile = files.find(
-      (f) =>
-        f.documentId === selectedDocumentId || f.uploadId === selectedDocumentId
-    );
-    if (!selectedFile) return;
-
-    setIsLoading(true);
-    try {
-      const data = await api.post(
-        `/api/knowledge-base/${projectId}/documents/preview`,
-        {
-          document_ids: [selectedDocumentId],
-          chunk_size: chunkSize,
-          chunk_overlap: chunkOverlap,
-        }
-      );
-
-      setUploadedDocuments(data);
-
-      toast({
-        title: "Preview generated",
-        description: "Document preview generated successfully.",
-      });
-    } catch (error) {
-      toast({
-        title: "Preview failed",
-        description:
-          error instanceof ApiError ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Step 3: Process documents
-  const handleProcess = async (uploadResults?: UploadResult[]) => {
-    const uploadIds = uploadResults
-      ? uploadResults.map((result) => result.upload_id!).filter((id) => id)
-      : files
-          .filter((f) => f.status === "uploaded")
-          .map((f) => f.uploadId!)
-          .filter((id) => id);
-
-    if (uploadIds.length === 0) return;
-
-    setIsLoading(true);
-    try {
-      const data = await api.post(`/api/document/process`, {
-        upload_ids: uploadIds,
-      });
-
-      // Initialize task statuses for tracking
-      const tasks = uploadIds.map((id) => ({
-        upload_id: id,
-        task_id: id, // Using upload_id as task_id for tracking
-      }));
-
-      const initialStatuses = tasks.reduce<TaskStatusMap>(
-        (acc, task) => ({
-          ...acc,
-          [task.task_id]: {
-            document_id: task.upload_id,
-            status: "pending" as const,
-          },
-        }),
-        {}
-      );
-      setTaskStatuses(initialStatuses);
-
-      // Start polling for task status
-      pollTaskStatus(tasks.map((t) => t.task_id));
-    } catch (error) {
-      setIsLoading(false);
-      toast({
-        title: "Processing failed",
-        description:
-          error instanceof ApiError ? error.message : "Something went wrong",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Poll task status
-  const pollTaskStatus = async (taskIds: number[]) => {
-    const poll = async () => {
-      try {
-        const response = (await api.get(
-          `/api/knowledge-base/${projectId}/documents/tasks?task_ids=${taskIds.join(
-            ","
-          )}`
-        )) as TaskStatusResponse;
-
-        // Convert string keys to numbers
-        const data = Object.entries(response).reduce<TaskStatusMap>(
-          (acc, [key, value]) => ({
-            ...acc,
-            [parseInt(key)]: value,
-          }),
-          {}
-        );
-
-        setTaskStatuses(data);
-
-        // Check if all tasks are completed or failed
-        const allDone = Object.values(data).every(
-          (task) => task.status === "completed" || task.status === "failed"
-        );
-
-        if (allDone) {
-          setIsLoading(false);
-          const hasErrors = Object.values(data).some(
-            (task) => task.status === "failed"
-          );
-          if (!hasErrors) {
-            toast({
-              title: "Processing completed",
-              description: "All documents have been processed successfully.",
-            });
-            onComplete?.();
-          } else {
-            toast({
-              title: "Processing completed with errors",
-              description: "Some documents failed to process.",
-              variant: "destructive",
-            });
-          }
-        } else {
-          // Continue polling
-          setTimeout(poll, 2000);
-        }
-      } catch (error) {
-        setIsLoading(false);
-        toast({
-          title: "Status check failed",
-          description:
-            error instanceof ApiError ? error.message : "Something went wrong",
-          variant: "destructive",
-        });
+      
+      if (allUploadsSuccessfulOrExist) {
+         toast({
+            title: "Uploads Accepted",
+            description: `${results.length} files submitted. Processing will continue in the background.`,
+         });
+      } else {
+         toast({
+            title: "Some Uploads Had Issues",
+            description: "Check file statuses below for details.",
+            variant: "destructive",
+          });
       }
+
+      if (hasQueuedFiles) {
+        startPolling();
+      } else {
+        // If no files were queued (all exist or errored immediately), check if onComplete can be called
+        checkIfAllDone();
+      }
+
+    } catch (error) {
+      setFiles(prev => prev.map(f => f.uiStatus === "uploading_to_server" ? {...f, uiStatus: "failed_upload", errorMessage: error instanceof ApiError ? error.message : "Network error or server issue during upload." } : f));
+      toast({
+        title: "Upload Failed",
+        description:
+          error instanceof ApiError ? error.message : "Could not reach server.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const pollUploadStatus = async () => {
+    const idsToPoll = files
+      .filter(f => (f.uiStatus === "awaits_processing" || f.uiStatus === "processing_on_server") && f.serverUploadId !== null)
+      .map(f => f.serverUploadId!);
+
+    if (idsToPoll.length === 0) {
+      stopPolling();
+      checkIfAllDone();
+      return;
+    }
+    
+    setIsPollingActive(true); // Keep polling active
+
+    try {
+      const queryParams = new URLSearchParams();
+      idsToPoll.forEach(id => queryParams.append("upload_ids", id.toString()));
+      
+      const statusMap = (await api.get(
+        `/api/document/upload/status?${queryParams.toString()}`
+      )) as ProcessingStatusResponseMap;
+
+      setFiles(prevFiles => 
+        prevFiles.map(fs => {
+          if (!fs.serverUploadId || !idsToPoll.includes(fs.serverUploadId)) return fs;
+
+          const statusDetail = statusMap[fs.serverUploadId.toString()];
+          if (statusDetail) {
+            if ('status' in statusDetail && statusDetail.status === 'not_found') {
+                return { ...fs, uiStatus: "failed_processing", errorMessage: statusDetail.detail || "Upload ID not found on server." };
+            }
+            const castedStatusDetail = statusDetail as ProcessingStatusDetail;
+
+            if (castedStatusDetail.upload_status === "completed") {
+              return { ...fs, uiStatus: "completed_success", serverDocumentId: castedStatusDetail.document_id };
+            } else if (castedStatusDetail.upload_status === "processing") {
+              return { ...fs, uiStatus: "processing_on_server" };
+            } else if (castedStatusDetail.upload_status === "error") {
+              return { ...fs, uiStatus: "failed_processing", errorMessage: castedStatusDetail.upload_error };
+            } else if (castedStatusDetail.upload_status === "queued") {
+              return { ...fs, uiStatus: "awaits_processing" }; // Still queued
+            }
+          }
+          return fs; // No change if status not found for some reason
+        })
+      );
+      checkIfAllDone(); // Check after each poll response
+    } catch (error) {
+      console.error("Polling failed:", error);
+      toast({
+        title: "Status Check Failed",
+        description: "Could not retrieve processing status for some files.",
+        variant: "destructive"
+      });
+      // Optionally, mark polled files as errored or stop polling
+      // For now, it will retry on the next interval. If API is down, polling will keep failing.
+    }
+  };
+
+  const startPolling = () => {
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current); // Clear existing
+    setIsPollingActive(true);
+    pollUploadStatus(); // Poll immediately
+    pollingIntervalRef.current = setInterval(pollUploadStatus, 5000); // Poll every 5 seconds
+  };
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setIsPollingActive(false);
+  };
+
+  const checkIfAllDone = () => {
+    const stillProcessing = files.some(f => 
+        f.uiStatus === "awaits_processing" || 
+        f.uiStatus === "processing_on_server" ||
+        f.uiStatus === "uploading_to_server"
+    );
+    if (!stillProcessing && files.length > 0) { // Ensure there were files to process
+        stopPolling();
+        if (onComplete) {
+            const allSuccessfullyCompletedOrExisted = files.every(f => f.uiStatus === "completed_success" || f.uiStatus === "completed_exists");
+            if (allSuccessfullyCompletedOrExisted) {
+                toast({
+                    title: "Processing Complete",
+                    description: "All files have been processed.",
+                });
+            } else {
+                 toast({
+                    title: "Processing Finished",
+                    description: "Some files could not be processed. Check statuses.",
+                    variant: "default" // Use default, as individual errors are shown
+                });
+            }
+            onComplete();
+        }
+    }
+  };
+
+  useEffect(() => {
+    // Cleanup polling on unmount
+    return () => {
+      stopPolling();
     };
-
-    poll();
+  }, []);
+  
+  // Determine overall progress/status for UI indication
+  const getOverallStatus = () => {
+    if (files.length === 0) return "idle";
+    if (isUploading) return "uploading";
+    if (files.some(f => f.uiStatus === "awaits_processing" || f.uiStatus === "processing_on_server")) return "processing";
+    if (files.every(f => f.uiStatus === "completed_success" || f.uiStatus === "completed_exists" || f.uiStatus === "failed_processing" || f.uiStatus === "failed_upload")) return "done";
+    return "pending_selection";
   };
 
-  const handleProcessClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    handleProcess();
-  };
+  const overallStatus = getOverallStatus();
 
   return (
     <div className="w-full max-w-4xl mx-auto">
+      {/* Simplified Step Indicator */}
       <div className="mb-8">
-        <div className="flex justify-between mb-2">
-          {[
-            { step: 1, icon: FiUpload, label: "Upload" },
-            { step: 2, icon: FiFileText, label: "Preview" },
-            { step: 3, icon: FiSettings, label: "Process" },
-          ].map(({ step, icon: Icon, label }, index, array) => (
-            <div
-              key={step}
-              className="flex flex-col items-center space-y-2 flex-1"
-            >
-              <div
-                className={cn(
-                  "w-12 h-12 rounded-full flex items-center justify-center border-2 transition-colors",
-                  currentStep === step
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : currentStep > step
-                    ? "bg-primary/20 border-primary/20"
-                    : "bg-background border-input"
-                )}
-              >
-                <Icon className="w-6 h-6" />
-              </div>
-              <span className="text-sm font-medium">
-                {step}. {label}
-              </span>
-              {index < array.length - 1 && (
-                <div
-                  className={cn(
-                    "h-0.5 w-full mt-2",
-                    currentStep > step ? "bg-primary/20" : "bg-input"
-                  )}
-                />
-              )}
+        <div className="flex items-center space-x-4 p-4 bg-muted rounded-lg">
+            {overallStatus === "idle" || overallStatus === "pending_selection" ? (
+                <FiUpload className="w-10 h-10 text-primary" />
+            ) : overallStatus === "uploading" ? (
+                <FiLoader className="w-10 h-10 text-primary animate-spin" />
+            ) : overallStatus === "processing" ? (
+                <FiClock className="w-10 h-10 text-primary animate-pulse" />
+            ) : (
+                <FiCheckCircle className="w-10 h-10 text-green-500" />
+            )}
+            <div>
+                <h3 className="text-lg font-semibold">
+                    {overallStatus === "idle" || overallStatus === "pending_selection" ? "Select and Upload Files" 
+                    : overallStatus === "uploading" ? "Uploading Files..."
+                    : overallStatus === "processing" ? "Processing Files..."
+                    : "Processing Complete"}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                    {overallStatus === "idle" || overallStatus === "pending_selection" ? "Drag & drop or browse to select documents."
+                    : overallStatus === "uploading" ? "Sending files to the server."
+                    : overallStatus === "processing" ? "Server is processing your documents. This may take a moment."
+                    : "All selected files have been processed or encountered an issue."}
+                </p>
             </div>
-          ))}
         </div>
       </div>
 
-      <Tabs value={String(currentStep)} className="w-full">
-        <TabsContent value="1" className="mt-6">
-          <Card className="p-6">
-            <div className="space-y-4">
-              <div
-                {...getRootProps()}
-                className={cn(
-                  "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
-                  isDragActive
-                    ? "border-primary bg-primary/5"
-                    : "hover:border-primary/50"
-                )}
-              >
-                <input {...getInputProps()} />
-                <FiUpload className="w-12 h-12 mx-auto text-muted-foreground" />
-                <p className="mt-2 text-sm font-medium">
-                  Drop your files here or click to browse
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Supports PDF, DOCX, TXT, and MD files
-                </p>
-              </div>
-              {files.length > 0 && (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {files.map((fileStatus) => (
-                    <div
-                      key={fileStatus.file.name}
-                      className="flex items-center justify-between p-4 rounded-lg border"
-                    >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-8 h-8">
-                          <FileIcon
-                            extension={fileStatus.file.name.split(".").pop()}
-                            {...defaultStyles[
-                              fileStatus.file.name
-                                .split(".")
-                                .pop() as keyof typeof defaultStyles
-                            ]}
-                          />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">
-                            {fileStatus.file.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {(fileStatus.file.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {fileStatus.status === "uploaded" && (
-                          <span className="text-green-500 text-sm">
-                            Uploaded
-                          </span>
-                        )}
-                        {fileStatus.status === "error" && (
-                          <span className="text-red-500 text-sm">
-                            {fileStatus.error}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => removeFile(fileStatus.file)}
-                          className="p-1 hover:bg-accent rounded-full"
-                        >
-                          <FiX className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+      <Card className="p-6">
+        <div className="space-y-4">
+          <div
+            {...getRootProps()}
+            className={cn(
+              "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
+              isDragActive
+                ? "border-primary bg-primary/5"
+                : "hover:border-primary/50",
+              (isUploading || isPollingActive) && "cursor-not-allowed opacity-70" // Disable dropzone while uploads/polling are active
+            )}
+          >
+            <input {...getInputProps()} disabled={isUploading || isPollingActive} />
+            <FiUpload className="w-12 h-12 mx-auto text-muted-foreground" />
+            <p className="mt-2 text-sm font-medium">
+              Drop files here or click to browse
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Supports PDF, DOCX, DOC, TXT, MD, XLS, XLSX
+            </p>
+          </div>
 
-              <Button
-                onClick={handleFileUpload}
-                disabled={
-                  !files.some((f) => f.status === "pending") || isLoading
-                }
-                className="w-full"
-              >
-                {isLoading && (
-                  <FiLoader className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Upload Files
-              </Button>
-            </div>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="2" className="mt-6">
-          <Card className="p-6">
-            <div className="space-y-6">
-              <h3 className="text-lg font-medium">
-                Select Document to Preview
-              </h3>
-              <div className="flex items-center space-x-4">
-                <Select
-                  value={selectedDocumentId?.toString()}
-                  onValueChange={(value: string) =>
-                    setSelectedDocumentId(parseInt(value))
-                  }
+          {files.length > 0 && (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto border rounded-md p-2">
+              {files.map((fs) => (
+                <div
+                  key={fs.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-background shadow-sm"
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a document to preview" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {files
-                      .filter((f) => f.status === "uploaded")
-                      .map((f) => (
-                        <SelectItem
-                          key={f.uploadId}
-                          value={f.uploadId!.toString()}
-                        >
-                          {f.file.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="settings">
-                  <AccordionTrigger>Advanced Settings</AccordionTrigger>
-                  <AccordionContent>
-                    <div className="grid gap-4 md:grid-cols-2 pt-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="chunk-size">Chunk Size (tokens)</Label>
-                        <Input
-                          id="chunk-size"
-                          type="number"
-                          value={chunkSize}
-                          onChange={(e) =>
-                            setChunkSize(parseInt(e.target.value))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="chunk-overlap">
-                          Chunk Overlap (tokens)
-                        </Label>
-                        <Input
-                          id="chunk-overlap"
-                          type="number"
-                          value={chunkOverlap}
-                          onChange={(e) =>
-                            setChunkOverlap(parseInt(e.target.value))
-                          }
-                        />
-                      </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 flex-shrink-0">
+                      <FileIcon
+                        extension={fs.file.name.split(".").pop()?.toLowerCase()}
+                        {...defaultStyles[
+                          fs.file.name.split(".").pop()?.toLowerCase() as keyof typeof defaultStyles
+                        ]}
+                      />
                     </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-
-              <div className="flex space-x-4">
-                <Button
-                  onClick={handlePreview}
-                  disabled={isLoading || !selectedDocumentId}
-                  className="flex-1"
-                >
-                  {isLoading && (
-                    <FiLoader className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Preview Chunks
-                </Button>
-                <Button
-                  onClick={() => setCurrentStep(3)}
-                  variant="secondary"
-                  className="flex-1"
-                >
-                  Continue
-                </Button>
-              </div>
-
-              {selectedDocumentId && uploadedDocuments[selectedDocumentId] && (
-                <div className="space-y-4">
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-medium">
-                        {
-                          files.find((f) => f.uploadId === selectedDocumentId)
-                            ?.file.name
-                        }
-                      </h3>
-                      <span className="text-sm text-muted-foreground">
-                        {uploadedDocuments[selectedDocumentId].chunks.length}{" "}
-                        chunks
-                      </span>
-                    </div>
-                    <div className="h-[400px] overflow-y-auto space-y-2 rounded-lg border p-4">
-                      {uploadedDocuments[selectedDocumentId].chunks.map(
-                        (chunk: PreviewChunk, index: number) => (
-                          <div
-                            key={index}
-                            className="p-4 bg-muted rounded-lg space-y-2"
-                          >
-                            <div className="text-sm text-muted-foreground">
-                              Chunk {index + 1}
-                            </div>
-                            <pre className="whitespace-pre-wrap text-sm">
-                              {chunk.content}
-                            </pre>
-                          </div>
-                        )
-                      )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate" title={fs.file.name}>
+                        {fs.file.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {(fs.file.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
                     </div>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    {fs.uiStatus === "pending_selection" && (
+                        <Badge variant="outline">Pending</Badge>
+                    )}
+                    {fs.uiStatus === "uploading_to_server" && (
+                      <>
+                        <FiLoader className="h-4 w-4 animate-spin text-primary" />
+                        <span className="text-xs text-primary">Uploading... {fs.progress || 0}%</span>
+                      </>
+                    )}
+                    {fs.uiStatus === "awaits_processing" && (
+                      <>
+                        <FiClock className="h-4 w-4 text-yellow-500" />
+                        <span className="text-xs text-yellow-500">Queued</span>
+                      </>
+                    )}
+                     {fs.uiStatus === "processing_on_server" && (
+                      <>
+                        <FiLoader className="h-4 w-4 animate-spin text-blue-500" />
+                        <span className="text-xs text-blue-500">Processing</span>
+                      </>
+                    )}
+                    {fs.uiStatus === "completed_success" && (
+                      <>
+                        <FiCheckCircle className="h-4 w-4 text-green-500" />
+                        <span className="text-xs text-green-500">Completed</span>
+                      </>
+                    )}
+                     {fs.uiStatus === "completed_exists" && (
+                      <>
+                        <FiHelpCircle className="h-4 w-4 text-blue-400" />
+                        <span className="text-xs text-blue-400">Exists</span>
+                      </>
+                    )}
+                    {(fs.uiStatus === "failed_upload" || fs.uiStatus === "failed_processing") && (
+                      <>
+                        <FiAlertCircle className="h-4 w-4 text-destructive" />
+                        <span className="text-xs text-destructive truncate max-w-[100px]" title={fs.errorMessage || "Failed"}>{fs.errorMessage || "Failed"}</span>
+                      </>
+                    )}
+                    <button
+                      onClick={() => removeFile(fs.id)}
+                      className="p-1 hover:bg-accent rounded-full disabled:opacity-50"
+                      disabled={isUploading || (isPollingActive && (fs.uiStatus === "awaits_processing" || fs.uiStatus === "processing_on_server"))}
+                      title="Remove file"
+                    >
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
-          </Card>
-        </TabsContent>
-        <TabsContent value="3" className="mt-6">
-          <Card className="p-6">
-            <div className="space-y-4">
-              <div className="max-h-[300px] overflow-y-auto space-y-2 rounded-lg border p-4">
-                {files
-                  .filter((f) => f.status === "uploaded")
-                  .map((file) => {
-                    const task = Object.values(taskStatuses).find(
-                      (t) => t.document_id === file.documentId
-                    );
-                    return (
-                      <div
-                        key={file.uploadId}
-                        className="p-4 border rounded-lg space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="w-8 h-8">
-                              <FileIcon
-                                extension={file.file.name.split(".").pop()}
-                                {...defaultStyles[
-                                  file.file.name
-                                    .split(".")
-                                    .pop() as keyof typeof defaultStyles
-                                ]}
-                              />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">
-                                {file.file.name}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {(file.file.size / 1024 / 1024).toFixed(2)} MB
-                              </p>
-                              {task && (
-                                <p className="text-xs text-muted-foreground">
-                                  Status: {task.status || "pending"}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          {task?.status === "failed" && (
-                            <p className="text-sm text-destructive">
-                              {task.error_message}
-                            </p>
-                          )}
-                        </div>
-                        {task &&
-                          (task.status === "pending" ||
-                            task.status === "processing") && (
-                            <Progress
-                              value={task.status === "processing" ? 50 : 25}
-                              className="w-full"
-                            />
-                          )}
-                      </div>
-                    );
-                  })}
-              </div>
+          )}
 
-              <Button
-                onClick={handleProcessClick}
-                disabled={
-                  isLoading ||
-                  files.filter((f) => f.status === "uploaded").length === 0
-                }
-                className="w-full"
-              >
-                {isLoading ? (
-                  <>
-                    <FiLoader className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <FiSettings className="mr-2 h-4 w-4" />
-                    Process
-                  </>
-                )}
-              </Button>
-            </div>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          <Button
+            onClick={handleUploadAndInitiateProcessing}
+            disabled={
+              !files.some((f) => f.uiStatus === "pending_selection") || isUploading || isPollingActive
+            }
+            className="w-full"
+          >
+            {(isUploading || isPollingActive) ? (
+              <FiLoader className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FiUpload className="mr-2 h-4 w-4" />
+            )}
+            {isUploading ? "Uploading..." : isPollingActive ? "Processing..." : `Upload ${files.filter(f=>f.uiStatus === 'pending_selection').length} File(s)`}
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }
