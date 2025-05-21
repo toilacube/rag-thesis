@@ -51,7 +51,7 @@ class Config:
     EMBEDDING_DIMENSION: int = int(os.environ.get("EMBEDDING_DIMENSION", 384))
 
         # --- LLM Chat Provider Configuration ---
-    CHAT_PROVIDER: str = os.environ.get("CHAT_PROVIDER", "ollama").lower() # Default to ollama
+    CHAT_PROVIDER: str = os.environ.get("CHAT_PROVIDER", "gemini").lower() 
 
     # OpenAI Configuration
     OPENAI_API_KEY: Optional[str] = os.environ.get("OPENAI_API_KEY")

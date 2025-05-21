@@ -1,6 +1,10 @@
 import json
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+import re
+from typing import Dict, Any, List, Optional, Tuple, AsyncIterator, Union
+
+from openai import AsyncOpenAI # Direct import
+from openai.types.chat import ChatCompletionChunk # For type hinting
 
 from app.config.config import Config, getConfig
 from app.llm_providers.llm_factory import LLMFactory
@@ -11,26 +15,29 @@ logger = logging.getLogger(__name__)
 class LLMService:
     def __init__(self, app_config: Config = Depends(getConfig)):
         self.app_config = app_config
-        # Client and model are initialized per call to allow dynamic provider/model if needed,
-        # or could be initialized once if always using the default.
-        # For simplicity, LLMFactory.create_async_client will be called in methods.
 
-    async def get_chat_completion(
+    async def get_chat_completion_stream(
         self,
         messages: List[Dict[str, str]],
-        provider: Optional[str] = None, # Override default provider
-        model_name: Optional[str] = None, # Override default model
+        provider: Optional[str] = None, # Provider override
+        model_name: Optional[str] = None, # Model override
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         response_format: Optional[Dict[str, str]] = None # e.g. {"type": "json_object"}
-    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]: # (content, usage_data)
+    ) -> AsyncIterator[Union[str, Dict[str, Any]]]:
         """
-        Gets a chat completion from the configured LLM provider.
-        Returns the content string and usage dictionary.
+        Gets a streaming chat completion from OpenAI or Gemini (via OpenAI SDK).
+        Yields text deltas (str) then a final dictionary with full content and usage.
         """
         selected_provider = provider or self.app_config.CHAT_PROVIDER
-        
+        full_response_text_parts = []
+        collected_usage_data = {
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0
+        }
+
         try:
+            # LLMFactory now returns AsyncOpenAI client directly for supported providers
+            client: AsyncOpenAI
             client, resolved_model_name = LLMFactory.create_async_client(
                 app_config=self.app_config,
                 provider=selected_provider
@@ -40,81 +47,105 @@ class LLMService:
             current_temperature = temperature if temperature is not None else self.app_config.LLM_DEFAULT_TEMPERATURE
             current_max_tokens = max_tokens or self.app_config.LLM_DEFAULT_MAX_TOKENS
 
-            logger.info(f"Requesting chat completion from {selected_provider} model {current_model_name} with temp {current_temperature}")
+            logger.info(f"Requesting STREAMING chat completion from {selected_provider} model {current_model_name}")
             
             completion_kwargs = {
                 "model": current_model_name,
                 "messages": messages,
                 "temperature": current_temperature,
-                "max_tokens": current_max_tokens,
+                # "max_tokens": current_max_tokens,
+                "stream": True,
+                "stream_options": {"include_usage": True} # For OpenAI and potentially Gemini via SDK
             }
             if response_format:
                 completion_kwargs["response_format"] = response_format
-             
-            # For Ollama, response_format might need to be passed differently or handled by prompt
-            if selected_provider == "ollama" and response_format and response_format.get("type") == "json_object":
-                # Ollama uses a top-level "format: json" in payload if client supports it
-                # The OllamaClient in llm_factory handles this.
-                pass
-
-
-            completion = await client.chat.completions.create(**completion_kwargs)
             
-            content = completion.choices[0].message.content
-            usage = completion.usage # Assuming OpenAI-like usage object
+            response_stream = await client.chat.completions.create(**completion_kwargs)
             
-            usage_data = {
-                "prompt_tokens": getattr(usage, 'prompt_tokens', 0),
-                "completion_tokens": getattr(usage, 'completion_tokens', 0),
-                "total_tokens": getattr(usage, 'total_tokens', 0),
+            chunk: ChatCompletionChunk # Type hint for clarity
+            async for chunk in response_stream:
+                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    delta_content = chunk.choices[0].delta.content
+                    full_response_text_parts.append(delta_content)
+                    yield delta_content
+                
+                if chunk.usage: # This will be on the final chunk when include_usage=True
+                    collected_usage_data["prompt_tokens"] = getattr(chunk.usage, 'prompt_tokens', 0)
+                    collected_usage_data["completion_tokens"] = getattr(chunk.usage, 'completion_tokens', 0)
+                    collected_usage_data["total_tokens"] = getattr(chunk.usage, 'total_tokens', 0)
+                    # For OpenAI, the last chunk with usage has empty choices.delta.content
+                    # So, we don't expect more content deltas after this.
+
+            final_full_content = "".join(full_response_text_parts)
+            logger.info(f"Stream finished for {selected_provider}. Full content length: {len(final_full_content)}. Usage: {collected_usage_data}")
+            yield {
+                "type": "final_data",
+                "full_content": final_full_content,
+                "usage": collected_usage_data
             }
-            logger.info(f"Completion received. Usage: {usage_data}")
-            return content, usage_data
 
         except Exception as e:
-            logger.error(f"Error getting chat completion from {selected_provider}: {e}", exc_info=True)
-            return None, None
+            logger.error(f"Error in get_chat_completion_stream from {selected_provider}: {e}", exc_info=True)
+            yield {
+                "type": "error",
+                "message": f"LLM streaming error: {str(e)}",
+                "full_content": "".join(full_response_text_parts) + f"\n[ERROR: Stream interrupted: {str(e)}]",
+                "usage": collected_usage_data # Partial usage if any was collected
+            }
 
     async def decide_rag_necessity(self, history: List[Dict[str, str]], user_question: str) -> Optional[Dict[str, Any]]:
         """
-        Uses LLM to decide if RAG is needed.
+        Uses LLM to decide if RAG is needed. Non-streaming.
         Returns a dictionary like {"need_rag": True/False, "reason": "..."} or None on error.
         """
-        from app.llm_providers.prompt_factory import ChatPromptFactory # Local import to avoid circularity if any
+        from app.llm_providers.prompt_factory import ChatPromptFactory # Local import
         
         prompt = ChatPromptFactory.rag_decision_prompt(history, user_question)
-        messages = [{"role": "user", "content": prompt}] # Simplified: entire prompt as user message
-
-        # Force JSON response from LLM if provider supports it
-        # For OpenAI, it's response_format={"type": "json_object"}
-        # For Ollama, it's "format": "json" in the payload, handled by OllamaClient
-        response_format_json = {"type": "json_object"}
-
-        content, _ = await self.get_chat_completion(
-            messages=messages,
-            temperature=0.5, # Low temp for deterministic decision
-            # max_tokens=150, # Ample for the JSON response
-            # response_format=response_format_json
+        
+        selected_provider = self.app_config.CHAT_PROVIDER
+        client: AsyncOpenAI
+        client, resolved_model_name = LLMFactory.create_async_client(
+            app_config=self.app_config, provider=selected_provider
         )
+        
+        messages_for_decision = [{"role": "user", "content": prompt}]
+        # For OpenAI and Gemini (via OpenAI SDK), use response_format for JSON
+        response_format_json = {"type": "json_object"}
+        
+        try:
+            logger.info(f"Requesting RAG decision from {selected_provider} model {resolved_model_name}")
+            completion_kwargs = {
+                "model": resolved_model_name,
+                "messages": messages_for_decision,
+                "temperature": 0.1,
+                "max_tokens": 200,
+                "stream": False, # Non-streaming for this decision
+                "response_format": response_format_json # For OpenAI/Gemini
+            }
 
-        if content:
-            try:
-                # Extract JSON from the content string if it's wrapped
-                # Basic extraction, might need more robust parsing for some models
-                json_content_match = re.search(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL)
-                if json_content_match:
-                    json_str = json_content_match.group(1)
-                else: # Assume the content is the JSON string itself
-                    json_str = content.strip()
-                    
-                decision = json.loads(json_str)
-                if "need_rag" in decision and isinstance(decision["need_rag"], bool):
-                    return decision
-                else:
-                    logger.error(f"LLM RAG decision response missing 'need_rag' boolean: {content}")
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse RAG decision JSON from LLM: {e}. Content: {content}")
-        return None
+            completion = await client.chat.completions.create(**completion_kwargs)
+            content = completion.choices[0].message.content
+            
+            if content:
+                json_str = content.strip()
+                if json_str.startswith("```json"):
+                    json_str = json_str[len("```json"):].strip()
+                if json_str.endswith("```"):
+                    json_str = json_str[:-len("```")].strip()
+                
+                try:
+                    decision = json.loads(json_str)
+                    if "need_rag" in decision and isinstance(decision["need_rag"], bool):
+                        logger.info(f"RAG decision: {decision}")
+                        return decision
+                    else:
+                        logger.error(f"LLM RAG decision response missing 'need_rag' boolean or invalid format: {content}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse RAG decision JSON from LLM: {e}. Content: {content}")
+            return None
+        except Exception as e:
+            logger.error(f"Error getting RAG decision from {selected_provider}: {e}", exc_info=True)
+            return None
 
 def get_llm_service(app_config: Config = Depends(getConfig)) -> LLMService:
     return LLMService(app_config)
