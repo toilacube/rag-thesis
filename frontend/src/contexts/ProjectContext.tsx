@@ -10,7 +10,7 @@ import React, {
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/use-toast";
 
-interface Project {
+export interface Project {
   id: number;
   name: string;
   description: string;

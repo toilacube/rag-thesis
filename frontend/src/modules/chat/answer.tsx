@@ -1,184 +1,199 @@
-import React, {
-  FC,
-  useMemo,
-  useEffect,
-  useState,
-  ClassAttributes,
-} from "react";
-import { AnchorHTMLAttributes } from "react";
+import React, { FC, useMemo, useEffect, useState, ClassAttributes, AnchorHTMLAttributes } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/popover";
 import { Skeleton } from "@/components/skeleton";
 import { Divider } from "@/components/divider";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { api } from "@/lib/api";
-import { FileIcon } from "react-file-icon";
+import { api } from "@/lib/api"; // Keep for potential future direct fetches if needed, or for consistency
+import { FileIcon, defaultStyles } from "react-file-icon"; // Keep if citations have file info
 
-interface Citation {
-  id: number;
+// Re-introducing Citation-related interfaces
+export interface CitationMetadata {
+  kb_id?: string | number; // Knowledge Base ID
+  document_id?: string | number; // Document ID
+  [key: string]: any; // Allow other metadata fields
+}
+
+export interface Citation {
+  id: number; // Or string, depending on how backend sends it. Usually an index.
   text: string;
-  metadata: Record<string, any>;
+  metadata: CitationMetadata;
+  // Optional fields based on your previous structure
+  file_name?: string;
+  knowledge_base_name?: string;
 }
 
-interface KnowledgeBaseInfo {
-  name: string;
-}
 
-interface DocumentInfo {
-  file_name: string;
-  knowledge_base: KnowledgeBaseInfo;
-}
-
+// For Popover display
 interface CitationInfo {
-  knowledge_base: KnowledgeBaseInfo;
-  document: DocumentInfo;
+  knowledge_base_name: string;
+  document_file_name: string;
 }
 
+// Main Answer Component
 export const Answer: FC<{
   markdown: string;
-  citations?: Citation[];
-}> = ({ markdown, citations = [] }) => {
-  const [citationInfoMap, setCitationInfoMap] = useState<
-    Record<string, CitationInfo>
-  >({});
+  citations?: Citation[]; // Citations are now optional
+}> = ({ markdown, citations = [] }) => { // Default to empty array if undefined
+  const [citationInfoMap, setCitationInfoMap] = useState<Record<string, CitationInfo>>({});
 
-  const processedMarkdown = useMemo(() => {
-    return markdown
-      .replace(/<think>/g, "## 💭 深度思考\n```think")
-      .replace(/<\/think>/g, "```");
-  }, [markdown]);
-
+  // Logic for fetching KB/Document names for citations if kb_id and document_id are present
+  // This logic might need adjustment if the backend sends file_name and kb_name directly in Citation object
   useEffect(() => {
-    const fetchCitationInfo = async () => {
+    const fetchCitationDetails = async () => {
       const infoMap: Record<string, CitationInfo> = {};
+      if (!citations || citations.length === 0) {
+        setCitationInfoMap({});
+        return;
+      }
 
       for (const citation of citations) {
         const { kb_id, document_id } = citation.metadata;
         if (!kb_id || !document_id) continue;
 
         const key = `${kb_id}-${document_id}`;
-        if (infoMap[key]) continue;
+        if (infoMap[key]) continue; // Already fetched or fetching
 
+        // If backend now sends names directly, this fetch might be redundant
+        if (citation.knowledge_base_name && citation.file_name) {
+            infoMap[key] = {
+                knowledge_base_name: citation.knowledge_base_name,
+                document_file_name: citation.file_name,
+            };
+            continue;
+        }
+
+        // Fallback to fetching if names are not directly provided
         try {
-          const [kb, doc] = await Promise.all([
-            api.get(`/api/knowledge-base/${kb_id}`),
-            api.get(`/api/knowledge-base/${kb_id}/documents/${document_id}`),
-          ]);
+          // This assumes your API structure for fetching KB/Doc names.
+          // Adjust if these endpoints are different or if data comes differently.
+          const kbPromise = citation.knowledge_base_name ? Promise.resolve({ name: citation.knowledge_base_name }) : api.get(`/api/knowledge-base/${kb_id}`);
+          const docPromise = citation.file_name ? Promise.resolve({ file_name: citation.file_name }) : api.get(`/api/knowledge-base/${kb_id}/documents/${document_id}`);
+          
+          const [kbData, docData] = await Promise.all([kbPromise, docPromise]);
 
           infoMap[key] = {
-            knowledge_base: {
-              name: kb.name,
-            },
-            document: {
-              file_name: doc.file_name,
-              knowledge_base: {
-                name: kb.name,
-              },
-            },
+            knowledge_base_name: kbData.name,
+            document_file_name: docData.file_name,
           };
         } catch (error) {
-          console.error("Failed to fetch citation info:", error);
+          console.error(`Failed to fetch citation details for ${key}:`, error);
+          // Store a fallback or leave it out
+          infoMap[key] = {
+             knowledge_base_name: `KB ${kb_id}`,
+             document_file_name: `Doc ${document_id}`
+          }
         }
       }
-
       setCitationInfoMap(infoMap);
     };
 
     if (citations.length > 0) {
-      fetchCitationInfo();
+      fetchCitationDetails();
     }
   }, [citations]);
 
-  const CitationLink = useMemo(
-    () =>
-      (
-        props: ClassAttributes<HTMLAnchorElement> &
-          AnchorHTMLAttributes<HTMLAnchorElement>
-      ) => {
-        const citationId = props.href?.match(/^(\d+)$/)?.[1];
-        const citation = citationId
-          ? citations[parseInt(citationId) - 1]
-          : null;
 
-        if (!citation) {
-          return <a>[{props.href}]</a>;
-        }
+  const CitationLink = useMemo(() => (
+    props: ClassAttributes<HTMLAnchorElement> & AnchorHTMLAttributes<HTMLAnchorElement>
+  ) => {
+    if (!citations || citations.length === 0) {
+        // If no citations, render as a normal link or placeholder
+        return <a {...props}>[{props.href}]</a>;
+    }
 
-        const citationInfo =
-          citationInfoMap[
-            `${citation.metadata.kb_id}-${citation.metadata.document_id}`
-          ];
+    const citationMatch = props.href?.match(/^(\d+)$/); // Expecting href to be just the citation number e.g., "1"
+    const citationIndex = citationMatch ? parseInt(citationMatch[1], 10) - 1 : -1; // 1-based index from markdown
+    
+    const citation = (citationIndex >= 0 && citationIndex < citations.length) ? citations[citationIndex] : null;
 
-        return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <a
-                {...props}
-                href="#"
-                role="button"
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors relative"
-              >
-                <span className="absolute -top-3 -right-1">[{props.href}]</span>
-              </a>
-            </PopoverTrigger>
-            <PopoverContent
-              side="top"
-              align="start"
-              className="max-w-2xl w-[calc(100vw-100px)] p-4 rounded-lg shadow-lg"
-            >
-              <div className="text-sm space-y-3">
-                {citationInfo && (
-                  <div className="flex items-center gap-2 text-xs font-medium text-gray-700 bg-gray-50 p-2 rounded">
-                    <div className="w-5 h-5 flex items-center justify-center">
-                      <FileIcon
-                        extension={
-                          citationInfo.document.file_name.split(".").pop() || ""
-                        }
-                        color="#E2E8F0"
-                        labelColor="#94A3B8"
-                      />
-                    </div>
-                    <span className="truncate">
-                      {citationInfo.knowledge_base.name} /{" "}
-                      {citationInfo.document.file_name}
-                    </span>
-                  </div>
-                )}
-                <Divider />
-                <p className="text-gray-700 leading-relaxed">{citation.text}</p>
-                <Divider />
-                {Object.keys(citation.metadata).length > 0 && (
-                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                    <div className="font-medium mb-2">Debug Info:</div>
-                    <div className="space-y-1">
-                      {Object.entries(citation.metadata).map(([key, value]) => (
-                        <div key={key} className="flex">
-                          <span className="font-medium min-w-[100px]">
-                            {key}:
-                          </span>
-                          <span className="text-gray-600">{String(value)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+    if (!citation) {
+      // If citation not found by index, render as a simple link or placeholder
+      return <a {...props}>[{props.href}]</a>;
+    }
+    
+    const citationKey = citation.metadata.kb_id && citation.metadata.document_id 
+        ? `${citation.metadata.kb_id}-${citation.metadata.document_id}` 
+        : null;
+    const displayInfo = citationKey ? citationInfoMap[citationKey] : null;
+    const popoverFileName = displayInfo?.document_file_name || citation.file_name || "Document";
+    const popoverKbName = displayInfo?.knowledge_base_name || citation.knowledge_base_name || "Knowledge Base";
+
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <a
+            {...props}
+            href="#" // Prevent navigation
+            role="button"
+            className="inline-flex items-center gap-0.5 px-1 py-0 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors relative"
+            title={`Citation ${citationIndex + 1}: ${citation.text.substring(0, 50)}...`}
+          >
+            [{citationIndex + 1}]
+          </a>
+        </PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="start"
+          className="max-w-md w-[calc(100vw-80px)] p-3 rounded-lg shadow-lg z-50" // Ensure z-index
+        >
+          <div className="text-xs space-y-2">
+            {(displayInfo || citation.file_name) && (
+              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-gray-50 p-1.5 rounded">
+                <div className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                   <div style={{ width: '16px', height: '16px' }}>
+                     <FileIcon
+                       extension={(popoverFileName.split(".").pop() || "").toLowerCase()}
+                       {...(defaultStyles[(popoverFileName.split(".").pop() || "").toLowerCase() as keyof typeof defaultStyles] || {})}
+                     />
+                   </div>
+                </div>
+                <span className="truncate" title={`${popoverKbName} / ${popoverFileName}`}>
+                  {popoverKbName} / {popoverFileName}
+                </span>
               </div>
-            </PopoverContent>
-          </Popover>
-        );
-      },
-    [citations, citationInfoMap]
-  );
+            )}
+            {displayInfo && <Divider className="my-1"/>}
+            <p className="text-gray-700 leading-relaxed max-h-32 overflow-y-auto">
+                {citation.text}
+            </p>
+            {Object.keys(citation.metadata).length > 0 && (
+              <>
+                <Divider className="my-1"/>
+                <div className="text-xxs text-gray-500 bg-gray-50 p-1.5 rounded"> {/* even smaller text for debug */}
+                  <div className="font-medium mb-1">Debug Info:</div>
+                  <pre className="whitespace-pre-wrap text-xxs">{JSON.stringify(citation.metadata, null, 2)}</pre>
+                </div>
+              </>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  }, [citations, citationInfoMap]);
 
-  if (!markdown) {
+  // Markdown parsing for citations: [Citation:1] or [[Citation:1]] -> [citation](1)
+  // Or a simpler [1] if the backend guarantees that. Assuming backend sends [1], [2] etc.
+  // The `useChat` `Message` type from `ai/react` doesn't have a standard `citations` field.
+  // This component assumes `citations` are passed in separately.
+  const preprocessedMarkdown = useMemo(() => {
+    if (!markdown) return "";
+    // This regex looks for [number] and converts it to a link that CitationLink can pick up.
+    // E.g., "Response with source [1]." -> "Response with source [citation](1)."
+    // This step is crucial if backend sends citations like [1], [2]
+    // If backend sends markdown like [citation](1) directly, this step might not be needed.
+    return markdown.replace(/\[(\d+)\]/g, (_match, p1) => `[citation](${p1})`);
+  }, [markdown]);
+
+
+  if (markdown === undefined || markdown === null) {
     return (
       <div className="flex flex-col gap-2">
         <Skeleton className="max-w-sm h-4 bg-zinc-200" />
         <Skeleton className="max-w-lg h-4 bg-zinc-200" />
-        <Skeleton className="max-w-2xl h-4 bg-zinc-200" />
-        <Skeleton className="max-w-lg h-4 bg-zinc-200" />
-        <Skeleton className="max-w-xl h-4 bg-zinc-200" />
+        {/* ... more skeletons */}
       </div>
     );
   }
@@ -189,10 +204,11 @@ export const Answer: FC<{
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
-          a: CitationLink,
+          // Only override 'a' if citations are present and feature is enabled
+          a: (citations && citations.length > 0) ? CitationLink : undefined,
         }}
       >
-        {processedMarkdown}
+        {preprocessedMarkdown}
       </Markdown>
     </div>
   );
