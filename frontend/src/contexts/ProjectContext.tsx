@@ -12,7 +12,7 @@ import { useToast } from "@/components/use-toast";
 
 export interface Project {
   id: number;
-  name: string;
+  project_name: string;
   description: string;
   created_at: string;
   updated_at?: string;

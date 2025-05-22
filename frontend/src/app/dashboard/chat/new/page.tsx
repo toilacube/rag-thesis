@@ -13,8 +13,14 @@ import { useProject, Project } from "@/contexts/ProjectContext"; // Import Proje
 
 export default function NewChatPage() {
   const router = useRouter();
-  const { projects, isLoading: isLoadingProjects, fetchProjects } = useProject(); // Use projects from context
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const {
+    projects,
+    isLoading: isLoadingProjects,
+    fetchProjects,
+  } = useProject(); // Use projects from context
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(
+    null
+  );
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,7 +34,6 @@ export default function NewChatPage() {
     }
   }, [projects, isLoadingProjects, selectedProjectId]);
 
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedProjectId) {
@@ -41,13 +46,13 @@ export default function NewChatPage() {
       return;
     }
     if (!title.trim()) {
-        setError("Please enter a chat title.");
-        toast({
-          title: "Validation Error",
-          description: "Chat title cannot be empty.",
-          variant: "destructive",
-        });
-        return;
+      setError("Please enter a chat title.");
+      toast({
+        title: "Validation Error",
+        description: "Chat title cannot be empty.",
+        variant: "destructive",
+      });
+      return;
     }
 
     setError("");
@@ -63,7 +68,10 @@ export default function NewChatPage() {
       router.push(`/dashboard/chat/${data.id}`);
     } catch (err) {
       console.error("Failed to create chat:", err);
-      const errorMessage = err instanceof ApiError ? err.message : "Failed to create chat session.";
+      const errorMessage =
+        err instanceof ApiError
+          ? err.message
+          : "Failed to create chat session.";
       setError(errorMessage);
       toast({
         title: "Error Creating Chat",
@@ -81,9 +89,9 @@ export default function NewChatPage() {
         <div className="h-8 w-3/4 bg-muted rounded"></div>
         <div className="h-6 w-1/2 bg-muted rounded"></div>
         <div className="space-y-4">
-            <div className="h-10 bg-muted rounded"></div>
-            <div className="h-20 bg-muted rounded"></div>
-            <div className="h-10 w-1/4 bg-muted rounded ml-auto"></div>
+          <div className="h-10 bg-muted rounded"></div>
+          <div className="h-20 bg-muted rounded"></div>
+          <div className="h-10 w-1/4 bg-muted rounded ml-auto"></div>
         </div>
       </div>
     );
@@ -146,37 +154,47 @@ export default function NewChatPage() {
           {/* <div className="text-xs text-muted-foreground">
             The AI will use documents from this project to answer your questions.
           </div> */}
-          <div className="grid gap-4 md:grid-cols-1"> {/* Changed to 1 column for better display of project descriptions */}
-            {projects.map((project: Project) => ( // Explicitly type project
-              <label
-                key={project.id}
-                className={`group flex items-center space-x-3 rounded-lg border p-4 cursor-pointer transition-all duration-200 hover:shadow-md ${
-                  selectedProjectId === project.id
-                    ? "border-primary bg-primary/5 shadow-sm ring-2 ring-primary"
-                    : "hover:border-primary/30"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="project-selection" // Changed name for radio group
-                  className="peer h-4 w-4 shrink-0 rounded-full border-primary text-primary focus:ring-primary focus:ring-offset-0"
-                  checked={selectedProjectId === project.id}
-                  onChange={() => setSelectedProjectId(project.id)}
-                />
-                <div className="flex-1 space-y-1">
-                  <p className="font-medium group-hover:text-primary transition-colors">
-                    {project.name}
-                  </p>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {project.description || "No description provided."}
-                  </p>
-                </div>
-              </label>
-            ))}
+          <div className="grid gap-4 md:grid-cols-1">
+            {" "}
+            {/* Changed to 1 column for better display of project descriptions */}
+            {projects.map(
+              (
+                project: Project // Explicitly type project
+              ) => (
+                <label
+                  key={project.id}
+                  className={`group flex items-center space-x-3 rounded-lg border p-4 cursor-pointer transition-all duration-200 hover:shadow-md ${
+                    selectedProjectId === project.id
+                      ? "border-primary bg-primary/5 shadow-sm ring-2 ring-primary"
+                      : "hover:border-primary/30"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="project-selection" // Changed name for radio group
+                    className="peer h-4 w-4 shrink-0 rounded-full border-primary text-primary focus:ring-primary focus:ring-offset-0"
+                    checked={selectedProjectId === project.id}
+                    onChange={() => setSelectedProjectId(project.id)}
+                  />
+                  <div className="flex-1 space-y-1">
+                    <p className="font-medium group-hover:text-primary transition-colors">
+                      {project.project_name}
+                    </p>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {project.description || "No description provided."}
+                    </p>
+                  </div>
+                </label>
+              )
+            )}
           </div>
         </div>
 
-        {error && <div className="text-sm text-red-500 p-3 bg-red-50 rounded-md">{error}</div>}
+        {error && (
+          <div className="text-sm text-red-500 p-3 bg-red-50 rounded-md">
+            {error}
+          </div>
+        )}
 
         <div className="flex justify-end space-x-4 pt-4">
           <button

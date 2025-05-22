@@ -12,12 +12,12 @@ import {
   FaMagic,
 } from "react-icons/fa";
 import { useProject } from "@/contexts/ProjectContext";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/select";
 
 interface Stats {
@@ -27,7 +27,8 @@ interface Stats {
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({ projects: 0, chats: 0 });
-  const { projects, selectedProject, setSelectedProject, isLoading } = useProject();
+  const { projects, selectedProject, setSelectedProject, isLoading } =
+    useProject();
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -35,7 +36,7 @@ export default function DashboardPage() {
       if (projects.length > 0) {
         setStats({
           projects: projects.length,
-          chats: 0 // This would require a separate API call
+          chats: 0, // This would require a separate API call
         });
       }
     };
@@ -64,7 +65,7 @@ export default function DashboardPage() {
             New Project
           </a>
         </div>
-        
+
         {/* Project selector dropdown */}
         {projects.length > 0 && (
           <div className="mt-6 max-w-md">
@@ -74,7 +75,7 @@ export default function DashboardPage() {
             <Select
               value={selectedProject?.id.toString()}
               onValueChange={(value) => {
-                const project = projects.find(p => p.id.toString() === value);
+                const project = projects.find((p) => p.id.toString() === value);
                 if (project) setSelectedProject(project);
               }}
             >
@@ -84,7 +85,7 @@ export default function DashboardPage() {
               <SelectContent>
                 {projects.map((project) => (
                   <SelectItem key={project.id} value={project.id.toString()}>
-                    {project.name}
+                    {project.project_name}
                   </SelectItem>
                 ))}
               </SelectContent>
