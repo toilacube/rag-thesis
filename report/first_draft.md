@@ -101,34 +101,25 @@ Tuyệt vời! Dựa trên file giới thiệu đề tài, tổng quan kiến tr
         3.1.1.1. Quản lý người dùng và phân quyền
         3.1.1.2. Quản lý dự án và tài liệu dự án (upload, tóm tắt, lưu trữ, xem trước)
         3.1.1.3. Hệ thống hỏi đáp dựa trên tài liệu (RAG)
-        3.1.1.4. Hệ thống hỏi đáp dựa trên cơ sở dữ liệu (Text-to-SQL - nếu có)
         3.1.1.5. Tìm kiếm thông minh (theo chủ đề, từ khóa, thẻ, ngày đăng)
         3.1.1.6. Hỗ trợ tối ưu hóa prompt cho người dùng
-        3.1.1.7. Tích hợp với công cụ quản lý dự án (Jira, Slack - nếu là mục tiêu mở rộng)
     3.1.2. Yêu cầu phi chức năng
         3.1.2.1. Tính chính xác và nhất quán của thông tin
         3.1.2.2. Hiệu năng và tốc độ phản hồi
         3.1.2.3. Khả năng mở rộng
         3.1.2.4. Tính bảo mật
         3.1.2.5. Tính dễ sử dụng
-3.2. Các tác nhân và Use Case
-    3.2.1. Xác định các tác nhân (Actor) của hệ thống (Người dùng, Quản trị viên)
-    3.2.2. Sơ đồ Use Case tổng quát
-    3.2.3. Mô tả chi tiết các Use Case chính
+
 3.3. Thiết kế kiến trúc tổng quan hệ thống
     3.3.1. Sơ đồ kiến trúc (Dựa trên "Tổng quan hệ thống (backend)" bạn cung cấp)
     3.3.2. Mô tả các thành phần chính và tương tác
-        3.3.2.1. API Gateway (FastAPI)
-        3.3.2.2. Service Xử lý Tài liệu (Document Processing Service - Consumer)
-        3.3.2.3. Service Hỏi Đáp (Q&A Service - RAG Logic)
-        3.3.2.4. Service Tích hợp LLM (LLM Integration Service)
-        3.3.2.5. Service Quản lý Dữ liệu (Data Management Service)
+        3.3.2.2. API Xử lý Tài liệu (Document Processing Service - Consumer)
+        3.3.2.3. API ice Hỏi Đáp (Q&A Service - RAG Logic)
 3.4. Thiết kế Module chi tiết
     3.4.1. Module Backend
         3.4.1.1. Thiết kế API Endpoints
         3.4.1.2. Luồng xử lý tải lên và tiền xử lý tài liệu (Upload & Async Processing Flow)
         3.4.1.3. Luồng xử lý hỏi đáp RAG (Chat & RAG Flow)
-        3.4.1.4. Luồng xử lý Text-to-SQL (Nếu có)
         3.4.1.5. Thiết kế cơ chế Prompt Engineering và tối ưu hóa
     3.4.2. Module Frontend (Nếu có - Sơ đồ các màn hình chính, luồng tương tác người dùng)
 3.5. Thiết kế cơ sở dữ liệu
