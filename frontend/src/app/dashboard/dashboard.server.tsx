@@ -1,14 +1,13 @@
 import { checkLoggedIn } from "@/utils/check-logged-in";
+import DashboardClient from "./dashboard.client";
 import { redirect } from "next/navigation";
 
-const Home = async () => {
+const Dashboard = async () => {
   const isLoggedIn = await checkLoggedIn();
-
   if (!isLoggedIn) {
     redirect("/login");
   }
-
-  redirect("/dashboard");
+  return <DashboardClient />;
 };
 
-export default Home;
+export default Dashboard;

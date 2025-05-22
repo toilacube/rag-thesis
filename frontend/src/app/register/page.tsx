@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 
-export default function RegisterPage() {
+const RegisterPage = () => {
   const router = useRouter();
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({
@@ -213,4 +213,6 @@ export default function RegisterPage() {
       </div>
     </main>
   );
-}
+};
+
+export default RegisterPage;

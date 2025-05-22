@@ -46,7 +46,7 @@ export interface APIKeyUpdate {
   is_active?: boolean;
 }
 
-export default function APIKeysPage() {
+const APIKeysPage = () => {
   const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -360,4 +360,6 @@ export default function APIKeysPage() {
       </div>
     </div>
   );
-}
+};
+
+export default APIKeysPage;
