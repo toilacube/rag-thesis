@@ -75,6 +75,29 @@ Response:
 }
 ```
 
+3. Get Current User
+
+`/auth/me`
+
+```bash
+curl -X GET http://localhost:8000/api/auth/me \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "email": "test@example.com",
+  "username": "test",
+  "is_active": true,
+  "is_superuser": false,
+  "id": 2,
+  "created_at": "2025-03-27T07:47:00",
+  "updated_at": "2025-03-27T07:47:00"
+}
+```
+
 ## Project API Documentation
 
 ### Base URL

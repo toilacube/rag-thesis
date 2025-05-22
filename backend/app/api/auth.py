@@ -1,7 +1,5 @@
-
-
 from exceptiongroup import catch
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from sqlalchemy.orm import Session 
 
@@ -64,4 +62,12 @@ async def register(*,  db: Session = Depends(get_db_session), userCreate: UserCr
 
     return new_user
     
-    
+@router.get("/me", response_model=UserResponse)
+def get_current_user(
+    current_user: User = Depends(security.get_current_user)
+):
+    if current_user.is_active:
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+    )
