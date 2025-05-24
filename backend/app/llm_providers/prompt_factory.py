@@ -29,14 +29,17 @@ class ChatPromptFactory:
 
     @staticmethod
     def rag_answer_prompt(history: List[Dict[str, str]], user_question: str, context_chunks: List[Dict[str, Any]]) -> str:
-        """
-        Generates the prompt for answering with RAG context.
-        context_chunks: List of {"text": "chunk_content", "metadata": {"file_name": "...", "chunk_id": "..."}}
-        """
+        formatted_context_chunks_for_template = []
+        for i, chunk_data in enumerate(context_chunks):
+            formatted_context_chunks_for_template.append({
+                "index_1": i + 1,
+                "text": chunk_data.get("text"),
+                "metadata": chunk_data.get("metadata", {})
+            })
         data = {
             "history": history,
             "user_question": user_question,
-            "context_chunks": context_chunks
+            "context_chunks": formatted_context_chunks_for_template
         }
         return ChatPromptFactory._load_and_render("rag_answer.mustache", data)
     

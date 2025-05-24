@@ -1,6 +1,3 @@
----
-FILE: documents/SYSTEM.md
----
 # Document Chat System Architecture
 
 This document provides an overview of the RAG (Retrieval-Augmented Generation) system architecture, focusing on the asynchronous document processing workflow using RabbitMQ.
