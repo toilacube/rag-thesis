@@ -45,7 +45,10 @@ export interface ProcessingStatusDetail {
   document_id: number | null;
 }
 
-export type ProcessingStatusResponseMap = Record<string, ProcessingStatusDetail | { status: "not_found"; detail: string }>;
+export type ProcessingStatusResponseMap = Record<
+  string,
+  ProcessingStatusDetail | { status: "not_found"; detail: string }
+>;
 
 export interface UploadFileStatus {
   id: string; // Unique ID for UI key, e.g., file.name + file.lastModified
@@ -93,8 +96,11 @@ export function DocumentUploadSteps({
     }));
     setFiles((prev) => {
       // Avoid duplicates if user drops same file again
-      const existingIds = new Set(prev.map(f => f.id));
-      return [...prev, ...newFileStatuses.filter(nf => !existingIds.has(nf.id))];
+      const existingIds = new Set(prev.map((f) => f.id));
+      return [
+        ...prev,
+        ...newFileStatuses.filter((nf) => !existingIds.has(nf.id)),
+      ];
     });
   }, []);
 
@@ -102,12 +108,15 @@ export function DocumentUploadSteps({
     onDrop,
     accept: {
       "application/pdf": [".pdf"],
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        [".docx"],
       "application/msword": [".doc"],
       "text/plain": [".txt"],
       "text/markdown": [".md"],
       "application/vnd.ms-excel": [".xls"],
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+        ".xlsx",
+      ],
     },
   });
 
@@ -116,11 +125,19 @@ export function DocumentUploadSteps({
   };
 
   const handleUploadAndInitiateProcessing = async () => {
-    const filesToUpload = files.filter((f) => f.uiStatus === "pending_selection");
+    const filesToUpload = files.filter(
+      (f) => f.uiStatus === "pending_selection",
+    );
     if (filesToUpload.length === 0) return;
 
     setIsUploading(true);
-    setFiles(prev => prev.map(f => f.uiStatus === "pending_selection" ? {...f, uiStatus: "uploading_to_server", progress: 10 } : f));
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.uiStatus === "pending_selection"
+          ? { ...f, uiStatus: "uploading_to_server", progress: 10 }
+          : f,
+      ),
+    );
 
     try {
       const formData = new FormData();
@@ -137,7 +154,7 @@ export function DocumentUploadSteps({
       const results = (await api.post(
         `/api/document/upload`,
         formData,
-        { headers: {} } // Content-Type will be set automatically for FormData
+        { headers: {} }, // Content-Type will be set automatically for FormData
       )) as DocumentUploadResult[];
 
       let allUploadsSuccessfulOrExist = true;
@@ -170,21 +187,26 @@ export function DocumentUploadSteps({
           }
           // If a file was in uploading_to_server state but no result, mark as error
           allUploadsSuccessfulOrExist = false;
-          return { ...fs, uiStatus: "failed_upload", errorMessage: "Upload result missing from server response.", progress: 100 };
-        })
+          return {
+            ...fs,
+            uiStatus: "failed_upload",
+            errorMessage: "Upload result missing from server response.",
+            progress: 100,
+          };
+        }),
       );
-      
+
       if (allUploadsSuccessfulOrExist) {
-         toast({
-            title: "Uploads Accepted",
-            description: `${results.length} files submitted. Processing will continue in the background.`,
-         });
+        toast({
+          title: "Uploads Accepted",
+          description: `${results.length} files submitted. Processing will continue in the background.`,
+        });
       } else {
-         toast({
-            title: "Some Uploads Had Issues",
-            description: "Check file statuses below for details.",
-            variant: "destructive",
-          });
+        toast({
+          title: "Some Uploads Had Issues",
+          description: "Check file statuses below for details.",
+          variant: "destructive",
+        });
       }
 
       if (hasQueuedFiles) {
@@ -193,9 +215,21 @@ export function DocumentUploadSteps({
         // If no files were queued (all exist or errored immediately), check if onComplete can be called
         checkIfAllDone();
       }
-
     } catch (error) {
-      setFiles(prev => prev.map(f => f.uiStatus === "uploading_to_server" ? {...f, uiStatus: "failed_upload", errorMessage: error instanceof ApiError ? error.message : "Network error or server issue during upload." } : f));
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.uiStatus === "uploading_to_server"
+            ? {
+                ...f,
+                uiStatus: "failed_upload",
+                errorMessage:
+                  error instanceof ApiError
+                    ? error.message
+                    : "Network error or server issue during upload.",
+              }
+            : f,
+        ),
+      );
       toast({
         title: "Upload Failed",
         description:
@@ -209,48 +243,72 @@ export function DocumentUploadSteps({
 
   const pollUploadStatus = async () => {
     const idsToPoll = files
-      .filter(f => (f.uiStatus === "awaits_processing" || f.uiStatus === "processing_on_server") && f.serverUploadId !== null)
-      .map(f => f.serverUploadId!);
+      .filter(
+        (f) =>
+          (f.uiStatus === "awaits_processing" ||
+            f.uiStatus === "processing_on_server") &&
+          f.serverUploadId !== null,
+      )
+      .map((f) => f.serverUploadId!);
 
     if (idsToPoll.length === 0) {
       stopPolling();
       checkIfAllDone();
       return;
     }
-    
+
     setIsPollingActive(true); // Keep polling active
 
     try {
       const queryParams = new URLSearchParams();
-      idsToPoll.forEach(id => queryParams.append("upload_ids", id.toString()));
-      
+      idsToPoll.forEach((id) =>
+        queryParams.append("upload_ids", id.toString()),
+      );
+
       const statusMap = (await api.get(
-        `/api/document/upload/status?${queryParams.toString()}`
+        `/api/document/upload/status?${queryParams.toString()}`,
       )) as ProcessingStatusResponseMap;
 
-      setFiles(prevFiles => 
-        prevFiles.map(fs => {
-          if (!fs.serverUploadId || !idsToPoll.includes(fs.serverUploadId)) return fs;
+      setFiles((prevFiles) =>
+        prevFiles.map((fs) => {
+          if (!fs.serverUploadId || !idsToPoll.includes(fs.serverUploadId))
+            return fs;
 
           const statusDetail = statusMap[fs.serverUploadId.toString()];
           if (statusDetail) {
-            if ('status' in statusDetail && statusDetail.status === 'not_found') {
-                return { ...fs, uiStatus: "failed_processing", errorMessage: statusDetail.detail || "Upload ID not found on server." };
+            if (
+              "status" in statusDetail &&
+              statusDetail.status === "not_found"
+            ) {
+              return {
+                ...fs,
+                uiStatus: "failed_processing",
+                errorMessage:
+                  statusDetail.detail || "Upload ID not found on server.",
+              };
             }
             const castedStatusDetail = statusDetail as ProcessingStatusDetail;
 
             if (castedStatusDetail.upload_status === "completed") {
-              return { ...fs, uiStatus: "completed_success", serverDocumentId: castedStatusDetail.document_id };
+              return {
+                ...fs,
+                uiStatus: "completed_success",
+                serverDocumentId: castedStatusDetail.document_id,
+              };
             } else if (castedStatusDetail.upload_status === "processing") {
               return { ...fs, uiStatus: "processing_on_server" };
             } else if (castedStatusDetail.upload_status === "error") {
-              return { ...fs, uiStatus: "failed_processing", errorMessage: castedStatusDetail.upload_error };
+              return {
+                ...fs,
+                uiStatus: "failed_processing",
+                errorMessage: castedStatusDetail.upload_error,
+              };
             } else if (castedStatusDetail.upload_status === "queued") {
               return { ...fs, uiStatus: "awaits_processing" }; // Still queued
             }
           }
           return fs; // No change if status not found for some reason
-        })
+        }),
       );
       checkIfAllDone(); // Check after each poll response
     } catch (error) {
@@ -258,7 +316,7 @@ export function DocumentUploadSteps({
       toast({
         title: "Status Check Failed",
         description: "Could not retrieve processing status for some files.",
-        variant: "destructive"
+        variant: "destructive",
       });
       // Optionally, mark polled files as errored or stop polling
       // For now, it will retry on the next interval. If API is down, polling will keep failing.
@@ -281,29 +339,35 @@ export function DocumentUploadSteps({
   };
 
   const checkIfAllDone = () => {
-    const stillProcessing = files.some(f => 
-        f.uiStatus === "awaits_processing" || 
+    const stillProcessing = files.some(
+      (f) =>
+        f.uiStatus === "awaits_processing" ||
         f.uiStatus === "processing_on_server" ||
-        f.uiStatus === "uploading_to_server"
+        f.uiStatus === "uploading_to_server",
     );
-    if (!stillProcessing && files.length > 0) { // Ensure there were files to process
-        stopPolling();
-        if (onComplete) {
-            const allSuccessfullyCompletedOrExisted = files.every(f => f.uiStatus === "completed_success" || f.uiStatus === "completed_exists");
-            if (allSuccessfullyCompletedOrExisted) {
-                toast({
-                    title: "Processing Complete",
-                    description: "All files have been processed.",
-                });
-            } else {
-                 toast({
-                    title: "Processing Finished",
-                    description: "Some files could not be processed. Check statuses.",
-                    variant: "default" // Use default, as individual errors are shown
-                });
-            }
-            onComplete();
+    if (!stillProcessing && files.length > 0) {
+      // Ensure there were files to process
+      stopPolling();
+      if (onComplete) {
+        const allSuccessfullyCompletedOrExisted = files.every(
+          (f) =>
+            f.uiStatus === "completed_success" ||
+            f.uiStatus === "completed_exists",
+        );
+        if (allSuccessfullyCompletedOrExisted) {
+          toast({
+            title: "Processing Complete",
+            description: "All files have been processed.",
+          });
+        } else {
+          toast({
+            title: "Processing Finished",
+            description: "Some files could not be processed. Check statuses.",
+            variant: "default", // Use default, as individual errors are shown
+          });
         }
+        onComplete();
+      }
     }
   };
 
@@ -313,13 +377,29 @@ export function DocumentUploadSteps({
       stopPolling();
     };
   }, []);
-  
+
   // Determine overall progress/status for UI indication
   const getOverallStatus = () => {
     if (files.length === 0) return "idle";
     if (isUploading) return "uploading";
-    if (files.some(f => f.uiStatus === "awaits_processing" || f.uiStatus === "processing_on_server")) return "processing";
-    if (files.every(f => f.uiStatus === "completed_success" || f.uiStatus === "completed_exists" || f.uiStatus === "failed_processing" || f.uiStatus === "failed_upload")) return "done";
+    if (
+      files.some(
+        (f) =>
+          f.uiStatus === "awaits_processing" ||
+          f.uiStatus === "processing_on_server",
+      )
+    )
+      return "processing";
+    if (
+      files.every(
+        (f) =>
+          f.uiStatus === "completed_success" ||
+          f.uiStatus === "completed_exists" ||
+          f.uiStatus === "failed_processing" ||
+          f.uiStatus === "failed_upload",
+      )
+    )
+      return "done";
     return "pending_selection";
   };
 
@@ -330,29 +410,35 @@ export function DocumentUploadSteps({
       {/* Simplified Step Indicator */}
       <div className="mb-8">
         <div className="flex items-center space-x-4 p-4 bg-muted rounded-lg">
-            {overallStatus === "idle" || overallStatus === "pending_selection" ? (
-                <FiUpload className="w-10 h-10 text-primary" />
-            ) : overallStatus === "uploading" ? (
-                <FiLoader className="w-10 h-10 text-primary animate-spin" />
-            ) : overallStatus === "processing" ? (
-                <FiClock className="w-10 h-10 text-primary animate-pulse" />
-            ) : (
-                <FiCheckCircle className="w-10 h-10 text-green-500" />
-            )}
-            <div>
-                <h3 className="text-lg font-semibold">
-                    {overallStatus === "idle" || overallStatus === "pending_selection" ? "Select and Upload Files" 
-                    : overallStatus === "uploading" ? "Uploading Files..."
-                    : overallStatus === "processing" ? "Processing Files..."
+          {overallStatus === "idle" || overallStatus === "pending_selection" ? (
+            <FiUpload className="w-10 h-10 text-primary" />
+          ) : overallStatus === "uploading" ? (
+            <FiLoader className="w-10 h-10 text-primary animate-spin" />
+          ) : overallStatus === "processing" ? (
+            <FiClock className="w-10 h-10 text-primary animate-pulse" />
+          ) : (
+            <FiCheckCircle className="w-10 h-10 text-green-500" />
+          )}
+          <div>
+            <h3 className="text-lg font-semibold">
+              {overallStatus === "idle" || overallStatus === "pending_selection"
+                ? "Select and Upload Files"
+                : overallStatus === "uploading"
+                  ? "Uploading Files..."
+                  : overallStatus === "processing"
+                    ? "Processing Files..."
                     : "Processing Complete"}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                    {overallStatus === "idle" || overallStatus === "pending_selection" ? "Drag & drop or browse to select documents."
-                    : overallStatus === "uploading" ? "Sending files to the server."
-                    : overallStatus === "processing" ? "Server is processing your documents. This may take a moment."
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {overallStatus === "idle" || overallStatus === "pending_selection"
+                ? "Drag & drop or browse to select documents."
+                : overallStatus === "uploading"
+                  ? "Sending files to the server."
+                  : overallStatus === "processing"
+                    ? "Server is processing your documents. This may take a moment."
                     : "All selected files have been processed or encountered an issue."}
-                </p>
-            </div>
+            </p>
+          </div>
         </div>
       </div>
 
@@ -365,10 +451,14 @@ export function DocumentUploadSteps({
               isDragActive
                 ? "border-primary bg-primary/5"
                 : "hover:border-primary/50",
-              (isUploading || isPollingActive) && "cursor-not-allowed opacity-70" // Disable dropzone while uploads/polling are active
+              (isUploading || isPollingActive) &&
+                "cursor-not-allowed opacity-70", // Disable dropzone while uploads/polling are active
             )}
           >
-            <input {...getInputProps()} disabled={isUploading || isPollingActive} />
+            <input
+              {...getInputProps()}
+              disabled={isUploading || isPollingActive}
+            />
             <FiUpload className="w-12 h-12 mx-auto text-muted-foreground" />
             <p className="mt-2 text-sm font-medium">
               Drop files here or click to browse
@@ -390,12 +480,18 @@ export function DocumentUploadSteps({
                       <FileIcon
                         extension={fs.file.name.split(".").pop()?.toLowerCase()}
                         {...defaultStyles[
-                          fs.file.name.split(".").pop()?.toLowerCase() as keyof typeof defaultStyles
+                          fs.file.name
+                            .split(".")
+                            .pop()
+                            ?.toLowerCase() as keyof typeof defaultStyles
                         ]}
                       />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate" title={fs.file.name}>
+                      <p
+                        className="text-sm font-medium truncate"
+                        title={fs.file.name}
+                      >
                         {fs.file.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
@@ -405,12 +501,14 @@ export function DocumentUploadSteps({
                   </div>
                   <div className="flex items-center space-x-2">
                     {fs.uiStatus === "pending_selection" && (
-                        <Badge variant="outline">Pending</Badge>
+                      <Badge variant="outline">Pending</Badge>
                     )}
                     {fs.uiStatus === "uploading_to_server" && (
                       <>
                         <FiLoader className="h-4 w-4 animate-spin text-primary" />
-                        <span className="text-xs text-primary">Uploading... {fs.progress || 0}%</span>
+                        <span className="text-xs text-primary">
+                          Uploading... {fs.progress || 0}%
+                        </span>
                       </>
                     )}
                     {fs.uiStatus === "awaits_processing" && (
@@ -419,34 +517,49 @@ export function DocumentUploadSteps({
                         <span className="text-xs text-yellow-500">Queued</span>
                       </>
                     )}
-                     {fs.uiStatus === "processing_on_server" && (
+                    {fs.uiStatus === "processing_on_server" && (
                       <>
                         <FiLoader className="h-4 w-4 animate-spin text-blue-500" />
-                        <span className="text-xs text-blue-500">Processing</span>
+                        <span className="text-xs text-blue-500">
+                          Processing
+                        </span>
                       </>
                     )}
                     {fs.uiStatus === "completed_success" && (
                       <>
                         <FiCheckCircle className="h-4 w-4 text-green-500" />
-                        <span className="text-xs text-green-500">Completed</span>
+                        <span className="text-xs text-green-500">
+                          Completed
+                        </span>
                       </>
                     )}
-                     {fs.uiStatus === "completed_exists" && (
+                    {fs.uiStatus === "completed_exists" && (
                       <>
                         <FiHelpCircle className="h-4 w-4 text-blue-400" />
                         <span className="text-xs text-blue-400">Exists</span>
                       </>
                     )}
-                    {(fs.uiStatus === "failed_upload" || fs.uiStatus === "failed_processing") && (
+                    {(fs.uiStatus === "failed_upload" ||
+                      fs.uiStatus === "failed_processing") && (
                       <>
                         <FiAlertCircle className="h-4 w-4 text-destructive" />
-                        <span className="text-xs text-destructive truncate max-w-[100px]" title={fs.errorMessage || "Failed"}>{fs.errorMessage || "Failed"}</span>
+                        <span
+                          className="text-xs text-destructive truncate max-w-[100px]"
+                          title={fs.errorMessage || "Failed"}
+                        >
+                          {fs.errorMessage || "Failed"}
+                        </span>
                       </>
                     )}
                     <button
                       onClick={() => removeFile(fs.id)}
                       className="p-1 hover:bg-accent rounded-full disabled:opacity-50"
-                      disabled={isUploading || (isPollingActive && (fs.uiStatus === "awaits_processing" || fs.uiStatus === "processing_on_server"))}
+                      disabled={
+                        isUploading ||
+                        (isPollingActive &&
+                          (fs.uiStatus === "awaits_processing" ||
+                            fs.uiStatus === "processing_on_server"))
+                      }
                       title="Remove file"
                     >
                       <FiX className="h-4 w-4" />
@@ -460,16 +573,22 @@ export function DocumentUploadSteps({
           <Button
             onClick={handleUploadAndInitiateProcessing}
             disabled={
-              !files.some((f) => f.uiStatus === "pending_selection") || isUploading || isPollingActive
+              !files.some((f) => f.uiStatus === "pending_selection") ||
+              isUploading ||
+              isPollingActive
             }
             className="w-full"
           >
-            {(isUploading || isPollingActive) ? (
+            {isUploading || isPollingActive ? (
               <FiLoader className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <FiUpload className="mr-2 h-4 w-4" />
             )}
-            {isUploading ? "Uploading..." : isPollingActive ? "Processing..." : `Upload ${files.filter(f=>f.uiStatus === 'pending_selection').length} File(s)`}
+            {isUploading
+              ? "Uploading..."
+              : isPollingActive
+                ? "Processing..."
+                : `Upload ${files.filter((f) => f.uiStatus === "pending_selection").length} File(s)`}
           </Button>
         </div>
       </Card>

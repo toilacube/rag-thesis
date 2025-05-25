@@ -12,7 +12,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/table";
-import { FiAlertCircle, FiCheckCircle, FiClock, FiLoader, FiFileText, FiHelpCircle } from "react-icons/fi"; // Added icons
+import {
+  FiAlertCircle,
+  FiCheckCircle,
+  FiClock,
+  FiLoader,
+  FiFileText,
+  FiHelpCircle,
+} from "react-icons/fi"; // Added icons
 import { api, ApiError } from "@/lib/api";
 
 // --- START: TypeScript Interfaces (can be moved to a types file) ---
@@ -33,7 +40,6 @@ export interface DocumentWithStatus {
 }
 // --- END: TypeScript Interfaces ---
 
-
 interface DocumentListProps {
   projectId: number;
 }
@@ -48,7 +54,9 @@ export function DocumentList({ projectId }: DocumentListProps) {
       try {
         setLoading(true);
         // Use the new endpoint to get documents with their processing status
-        const data = await api.get(`/api/document/project/${projectId}/with-status`);
+        const data = await api.get(
+          `/api/document/project/${projectId}/with-status`,
+        );
         setDocuments(data as DocumentWithStatus[]);
         setError(null);
       } catch (error) {
@@ -63,26 +71,47 @@ export function DocumentList({ projectId }: DocumentListProps) {
       }
     };
 
-    if (projectId) { // Ensure projectId is valid before fetching
-        fetchDocuments();
+    if (projectId) {
+      // Ensure projectId is valid before fetching
+      fetchDocuments();
     } else {
-        setLoading(false);
-        setError("Project ID is not available.");
+      setLoading(false);
+      setError("Project ID is not available.");
     }
   }, [projectId]);
 
   const getStatusBadge = (status: DocumentWithStatus["processing_status"]) => {
     switch (status?.toLowerCase()) {
       case "completed":
-        return <Badge variant="secondary" className="bg-green-100 text-green-700"><FiCheckCircle className="mr-1 inline"/> Completed</Badge>;
+        return (
+          <Badge variant="secondary" className="bg-green-100 text-green-700">
+            <FiCheckCircle className="mr-1 inline" /> Completed
+          </Badge>
+        );
       case "processing":
-        return <Badge variant="default" className="bg-blue-100 text-blue-700"><FiLoader className="mr-1 inline animate-spin"/> Processing</Badge>;
+        return (
+          <Badge variant="default" className="bg-blue-100 text-blue-700">
+            <FiLoader className="mr-1 inline animate-spin" /> Processing
+          </Badge>
+        );
       case "queued":
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-700"><FiClock className="mr-1 inline"/> Queued</Badge>;
+        return (
+          <Badge variant="outline" className="bg-yellow-100 text-yellow-700">
+            <FiClock className="mr-1 inline" /> Queued
+          </Badge>
+        );
       case "error":
-        return <Badge variant="destructive"><FiAlertCircle className="mr-1 inline"/> Error</Badge>;
+        return (
+          <Badge variant="destructive">
+            <FiAlertCircle className="mr-1 inline" /> Error
+          </Badge>
+        );
       default: // Covers null, undefined, or other unexpected statuses
-        return <Badge variant="outline"><FiHelpCircle className="mr-1 inline"/> Unknown</Badge>;
+        return (
+          <Badge variant="outline">
+            <FiHelpCircle className="mr-1 inline" /> Unknown
+          </Badge>
+        );
     }
   };
 
@@ -117,7 +146,8 @@ export function DocumentList({ projectId }: DocumentListProps) {
           <div className="space-y-2">
             <h3 className="text-xl font-semibold">No documents yet</h3>
             <p className="text-muted-foreground">
-              Upload your first document to start building your knowledge base for this project.
+              Upload your first document to start building your knowledge base
+              for this project.
             </p>
           </div>
         </div>
@@ -138,37 +168,56 @@ export function DocumentList({ projectId }: DocumentListProps) {
       </TableHeader>
       <TableBody>
         {documents.map((doc) => (
-          <TableRow key={doc.upload_id}> {/* Use upload_id as key as doc.id can be null */}
+          <TableRow key={doc.upload_id}>
+            {" "}
+            {/* Use upload_id as key as doc.id can be null */}
             <TableCell className="font-medium">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 flex-shrink-0">
                   <FileIcon
-                    extension={doc.file_name.split(".").pop()?.toLowerCase() || ""}
-                    {...defaultStyles[doc.file_name.split(".").pop()?.toLowerCase() as keyof typeof defaultStyles]}
+                    extension={
+                      doc.file_name.split(".").pop()?.toLowerCase() || ""
+                    }
+                    {...defaultStyles[
+                      doc.file_name
+                        .split(".")
+                        .pop()
+                        ?.toLowerCase() as keyof typeof defaultStyles
+                    ]}
                     color="#E2E8F0" // Default color if type not in defaultStyles
                     labelColor="#94A3B8"
                   />
                 </div>
-                <span className="truncate" title={doc.file_name}>{doc.file_name}</span>
+                <span className="truncate" title={doc.file_name}>
+                  {doc.file_name}
+                </span>
               </div>
             </TableCell>
             <TableCell>
-                {doc.file_size ? `${(doc.file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
+              {doc.file_size
+                ? `${(doc.file_size / 1024 / 1024).toFixed(2)} MB`
+                : "N/A"}
             </TableCell>
             <TableCell>
-              {formatDistanceToNow(new Date(doc.created_at), { // created_at is from DocumentUpload initially, then Document
+              {formatDistanceToNow(new Date(doc.created_at), {
+                // created_at is from DocumentUpload initially, then Document
                 addSuffix: true,
               })}
             </TableCell>
-            <TableCell>
-              {getStatusBadge(doc.processing_status)}
-            </TableCell>
+            <TableCell>{getStatusBadge(doc.processing_status)}</TableCell>
             <TableCell>
               {doc.processing_status === "error" && doc.error_message && (
-                <p className="text-xs text-destructive truncate" title={doc.error_message}>{doc.error_message}</p>
+                <p
+                  className="text-xs text-destructive truncate"
+                  title={doc.error_message}
+                >
+                  {doc.error_message}
+                </p>
               )}
-               {doc.id && doc.processing_status === "completed" && (
-                <p className="text-xs text-muted-foreground">Doc ID: {doc.id}</p>
+              {doc.id && doc.processing_status === "completed" && (
+                <p className="text-xs text-muted-foreground">
+                  Doc ID: {doc.id}
+                </p>
               )}
             </TableCell>
           </TableRow>

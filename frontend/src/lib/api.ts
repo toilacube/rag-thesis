@@ -78,14 +78,14 @@ export async function fetchApi(path: string, options: FetchOptions = {}) {
       const errorData = await response.json().catch(() => ({}));
       throw new ApiError(
         response.status,
-        errorData.message || errorData.detail || "An error occurred"
+        errorData.message || errorData.detail || "An error occurred",
       );
     }
 
     // Check if the response has content before trying to parse it as JSON
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
-      return await response.json(); 
+      return await response.json();
     } else {
       // For empty responses (common with DELETE requests)
       return { success: true, status: response.status };
@@ -109,7 +109,7 @@ export const api = {
     fetchApi(url, { ...options, method: "PUT", data }),
 
   delete: (url: string, options?: Omit<FetchOptions, "method">) =>
-    fetchApi(url, { ...options, method: "DELETE" }),  
+    fetchApi(url, { ...options, method: "DELETE" }),
 
   patch: (url: string, data?: any, options?: Omit<FetchOptions, "method">) =>
     fetchApi(url, { ...options, method: "PATCH", data }),

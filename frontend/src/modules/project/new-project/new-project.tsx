@@ -13,6 +13,6 @@ const NewProject = () => {
       <NewProjectForm />
     </div>
   );
-}
+};
 
 export default NewProject;

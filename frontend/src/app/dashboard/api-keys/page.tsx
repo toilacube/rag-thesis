@@ -1,9 +1,7 @@
 import { APIKeys } from "@/modules/api-keys";
 
 const APIKeysPage = async () => {
-  return (
-    <APIKeys />
-  );
+  return <APIKeys />;
 };
 
 export default APIKeysPage;

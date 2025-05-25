@@ -31,7 +31,7 @@ export const ProjectProvider = ({
 }) => {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [selectedProject, setSelectedProject] = useState<Project | null>(
-    initialSelectedProject || initialProjects[0] || null
+    initialSelectedProject || initialProjects[0] || null,
   );
 
   return (

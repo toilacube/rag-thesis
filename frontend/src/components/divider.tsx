@@ -18,7 +18,7 @@ export const Divider: React.FC<DividerProps> = ({
         orientation === "horizontal"
           ? "h-[1px] w-full"
           : "w-[1px] h-full min-h-[20px]",
-        className
+        className,
       )}
       role="separator"
     />

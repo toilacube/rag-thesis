@@ -27,7 +27,8 @@ interface ChatResponse {
   messages: MessageResponse[];
 }
 
-export default function ChatListPage() { // Renamed for clarity
+export default function ChatListPage() {
+  // Renamed for clarity
   const [chats, setChats] = useState<ChatResponse[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +47,8 @@ export default function ChatListPage() { // Renamed for clarity
       console.error("Failed to fetch chats:", error);
       toast({
         title: "Error",
-        description: error instanceof ApiError ? error.message : "Could not load chats.",
+        description:
+          error instanceof ApiError ? error.message : "Could not load chats.",
         variant: "destructive",
       });
     } finally {
@@ -71,14 +73,15 @@ export default function ChatListPage() { // Renamed for clarity
       console.error("Failed to delete chat:", error);
       toast({
         title: "Error",
-        description: error instanceof ApiError ? error.message : "Could not delete chat.",
+        description:
+          error instanceof ApiError ? error.message : "Could not delete chat.",
         variant: "destructive",
       });
     }
   };
 
   const filteredChats = chats.filter((chat) =>
-    chat.title.toLowerCase().includes(searchTerm.toLowerCase())
+    chat.title.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   if (isLoading) {
@@ -141,11 +144,17 @@ export default function ChatListPage() { // Renamed for clarity
                     <FiMessageSquare className="h-6 w-6 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-lg truncate group-hover:text-primary transition-colors" title={chat.title}>
+                    <h3
+                      className="font-semibold text-lg truncate group-hover:text-primary transition-colors"
+                      title={chat.title}
+                    >
                       {chat.title}
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {chat.messages.length} messages â€¢ Updated {formatDistanceToNow(new Date(chat.updated_at), { addSuffix: true })}
+                      {chat.messages.length} messages â€¢ Updated{" "}
+                      {formatDistanceToNow(new Date(chat.updated_at), {
+                        addSuffix: true,
+                      })}
                     </p>
                   </div>
                 </div>
@@ -154,10 +163,10 @@ export default function ChatListPage() { // Renamed for clarity
                     {chat.messages[chat.messages.length - 1].content}
                   </p>
                 )}
-                 {chat.messages.length === 0 && (
-                    <p className="text-sm text-muted-foreground mt-4 italic flex-grow">
-                        No messages yet.
-                    </p>
+                {chat.messages.length === 0 && (
+                  <p className="text-sm text-muted-foreground mt-4 italic flex-grow">
+                    No messages yet.
+                  </p>
                 )}
               </div>
             </Link>

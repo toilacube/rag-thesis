@@ -13,13 +13,9 @@ import { useProject, Project } from "@/contexts/project-provider"; // Import Pro
 
 export default function NewChatPage() {
   const router = useRouter();
-  const {
-    projects,
-    isLoading: isLoadingProjects,
-    fetchProjects,
-  } = useProject(); // Use projects from context
+  const { projects } = useProject(); // Use projects from context
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(
-    null
+    null,
   );
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
@@ -28,11 +24,11 @@ export default function NewChatPage() {
 
   useEffect(() => {
     // Projects are fetched by ProjectProvider, ensure they are loaded
-    if (!isLoadingProjects && projects.length > 0 && !selectedProjectId) {
+    if (projects.length > 0 && !selectedProjectId) {
       // Optionally auto-select the first project
       // setSelectedProjectId(projects[0].id);
     }
-  }, [projects, isLoadingProjects, selectedProjectId]);
+  }, [projects, selectedProjectId]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -83,21 +79,21 @@ export default function NewChatPage() {
     }
   };
 
-  if (isLoadingProjects) {
-    return (
-      <div className="max-w-2xl mx-auto space-y-8 animate-pulse">
-        <div className="h-8 w-3/4 bg-muted rounded"></div>
-        <div className="h-6 w-1/2 bg-muted rounded"></div>
-        <div className="space-y-4">
-          <div className="h-10 bg-muted rounded"></div>
-          <div className="h-20 bg-muted rounded"></div>
-          <div className="h-10 w-1/4 bg-muted rounded ml-auto"></div>
-        </div>
-      </div>
-    );
-  }
+  // if (isLoadingProjects) {
+  //   return (
+  //     <div className="max-w-2xl mx-auto space-y-8 animate-pulse">
+  //       <div className="h-8 w-3/4 bg-muted rounded"></div>
+  //       <div className="h-6 w-1/2 bg-muted rounded"></div>
+  //       <div className="space-y-4">
+  //         <div className="h-10 bg-muted rounded"></div>
+  //         <div className="h-20 bg-muted rounded"></div>
+  //         <div className="h-10 w-1/4 bg-muted rounded ml-auto"></div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
-  if (!isLoadingProjects && projects.length === 0) {
+  if (projects.length === 0) {
     return (
       <div className="max-w-2xl mx-auto text-center py-16">
         <FaFolderOpen className="mx-auto h-16 w-16 text-muted-foreground/50 mb-6" />
@@ -159,7 +155,7 @@ export default function NewChatPage() {
             {/* Changed to 1 column for better display of project descriptions */}
             {projects.map(
               (
-                project: Project // Explicitly type project
+                project: Project, // Explicitly type project
               ) => (
                 <label
                   key={project.id}
@@ -185,7 +181,7 @@ export default function NewChatPage() {
                     </p>
                   </div>
                 </label>
-              )
+              ),
             )}
           </div>
         </div>

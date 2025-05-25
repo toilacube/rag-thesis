@@ -39,15 +39,15 @@ const ApiKeysTable = ({ initialApiKeys }: { initialApiKeys: APIKey[] }) => {
 
   const handleToggleAPIKeyStatus = async (
     id: number,
-    currentStatus: boolean
+    currentStatus: boolean,
   ) => {
     try {
       await toggleAPIKeyStatus(id, currentStatus);
 
       setApiKeys(
         apiKeys.map((key) =>
-          key.id === id ? { ...key, is_active: !currentStatus } : key
-        )
+          key.id === id ? { ...key, is_active: !currentStatus } : key,
+        ),
       );
 
       toast({

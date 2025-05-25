@@ -85,7 +85,7 @@ export async function fetchApi(path: string, options: FetchOptions = {}) {
       const errorData = await response.json().catch(() => ({}));
       throw new ApiError(
         response.status,
-        errorData.message || errorData.detail || "An error occurred"
+        errorData.message || errorData.detail || "An error occurred",
       );
     }
 

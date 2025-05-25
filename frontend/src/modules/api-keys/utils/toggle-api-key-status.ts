@@ -4,7 +4,7 @@ import { api } from "@/lib/api-server";
 
 export const toggleAPIKeyStatus = async (
   id: number,
-  currentStatus: boolean
+  currentStatus: boolean,
 ) => {
   try {
     const response = await api.put(`/api/api-keys/${id}`, {
