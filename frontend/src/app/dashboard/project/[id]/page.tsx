@@ -14,8 +14,8 @@ import {
 } from "@/components/dialog";
 import { FiPlus } from "react-icons/fi";
 import { Button } from "@/components/button";
-import { useProject } from "@/contexts/ProjectContext"; // Import useProject
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/card"; // For project info display
+import { useProject } from "@/contexts/project-provider"; // Import useProject
+import { Card, CardHeader, CardTitle } from "@/components/card"; // For project info display
 
 export default function ProjectDetailPage() {
   // Renamed for clarity
@@ -23,7 +23,7 @@ export default function ProjectDetailPage() {
   const projectId = parseInt(params.id as string);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const { projects, isLoading: projectLoading } = useProject(); // Get projects to display name/desc
+  const { projects } = useProject(); // Get projects to display name/desc
 
   const currentProject = projects.find((p) => p.id === projectId);
 
@@ -32,11 +32,7 @@ export default function ProjectDetailPage() {
     setDialogOpen(false); // Close the dialog
   }, []);
 
-  if (projectLoading) {
-    return <div className="p-8 text-center">Loading project details...</div>;
-  }
-
-  if (!currentProject && !projectLoading) {
+  if (!currentProject) {
     return (
       <div className="p-8 text-center text-destructive">Project not found.</div>
     );
