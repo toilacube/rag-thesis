@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project(
-    request: CreateProjectRequest, db: Session = Depends(get_db_session)
+    request: CreateProjectRequest, db: Session = Depends(get_db_session), current_user: User = Depends(get_current_user)
 ):
     """
     Create a new project.
@@ -22,6 +22,14 @@ def create_project(
         description=request.description,
     )
     db.add(new_project)
+    db.flush()
+    
+    project_permission = ProjectPermission(
+        project_id=new_project.id,
+        user_id=current_user.id,
+        permission_id=8 # admin role?
+    )
+    db.add(project_permission)
     db.commit()
     db.refresh(new_project)
     return new_project

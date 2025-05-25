@@ -1,5 +1,5 @@
 import Breadcrumb from "@/components/breadcrumb";
-import { ProjectProvider } from "@/contexts/ProjectContext";
+import { ProjectProvider } from "@/contexts/project-provider";
 import Menu from "./menu";
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => {

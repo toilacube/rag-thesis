@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
-import { useProject } from "@/contexts/ProjectContext";
+import { useProject } from "@/contexts/project-provider";
+import { createProject } from "./create-project-action";
 
 export default function NewProjectPage() {
   const router = useRouter();
-  const { fetchProjects } = useProject();
+  const { projects, setProjects } = useProject();
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -17,27 +17,15 @@ export default function NewProjectPage() {
     setIsSubmitting(true);
 
     const formData = new FormData(e.currentTarget);
-    const name = formData.get("name");
-    const description = formData.get("description");
 
-    try {
-      await api.post("/api/project", {
-        project_name: name,
-        description: description || "",
-      });
-
-      // Fetch the updated list of projects before navigation
-      await fetchProjects();
-
+    const { success, project, message } = await createProject(formData);
+    if (success) {
+      setProjects([...projects, project]);
       router.push("/dashboard/project");
-    } catch (err) {
-      console.error("Error creating project:", err);
-      setError(
-        err instanceof ApiError ? err.message : "Failed to create project"
-      );
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      setError(message || "Failed to create project");
     }
+    setIsSubmitting(false);
   };
 
   return (

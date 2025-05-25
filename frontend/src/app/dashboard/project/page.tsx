@@ -8,7 +8,7 @@ import {
   FiTrash2,
   FiSearch,
 } from "react-icons/fi";
-import { useProject } from "@/contexts/ProjectContext";
+import { useProject } from "@/contexts/project-provider";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/use-toast";
 

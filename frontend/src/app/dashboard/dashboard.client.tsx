@@ -11,7 +11,7 @@ import {
   FaSearch,
   FaMagic,
 } from "react-icons/fa";
-import { useProject } from "@/contexts/ProjectContext";
+import { useProject } from "@/contexts/project-provider";
 import {
   Select,
   SelectContent,

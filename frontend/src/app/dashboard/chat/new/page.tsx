@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/use-toast";
 import { FaPlus, FaFolderOpen } from "react-icons/fa"; // Changed icon
 import { FiLoader } from "react-icons/fi"; // Added loader icon
-import { useProject, Project } from "@/contexts/ProjectContext"; // Import Project type
+import { useProject, Project } from "@/contexts/project-provider"; // Import Project type
 
 // Removed KnowledgeBase interface
 

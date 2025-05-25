@@ -1,5 +1,5 @@
 import DashboardClient from "./dashboard.client";
-import { ProjectProvider } from "@/contexts/ProjectContext";
+import { ProjectProvider } from "@/contexts/project-provider";
 import { getProjects } from "@/utils/get-projects";
 
 const Dashboard = async () => {
