@@ -1,14 +1,6 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
-import { api, ApiError } from "@/lib/api";
-import { useToast } from "@/components/use-toast";
+import React, { createContext, useContext, useState, ReactNode } from "react";
 
 export interface Project {
   id: number;
@@ -23,69 +15,43 @@ interface ProjectContextType {
   projects: Project[];
   selectedProject: Project | null;
   setSelectedProject: (project: Project | null) => void;
-  fetchProjects: () => Promise<void>;
-  isLoading: boolean;
+  setProjects: (projects: Project[]) => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-export function ProjectProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const { toast } = useToast();
-
-  const fetchProjects = async () => {
-    setIsLoading(true);
-    try {
-      // Use the new endpoint that fetches projects for the currently authenticated user
-      const data = await api.get(`/api/project/user/me`);
-      setProjects(data);
-
-      // If there's at least one project and none is selected, select the first one
-      if (data.length > 0 && !selectedProject) {
-        setSelectedProject(data[0]);
-      }
-    } catch (error) {
-      console.error("Failed to fetch projects:", error);
-      if (error instanceof ApiError) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
-      // Set empty projects array on error
-      setProjects([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Load projects on initial render
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+export const ProjectProvider = ({
+  children,
+  initialProjects = [],
+  initialSelectedProject = null,
+}: {
+  children: ReactNode;
+  initialProjects?: Project[];
+  initialSelectedProject?: Project | null;
+}) => {
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(
+    initialSelectedProject || initialProjects[0] || null
+  );
 
   return (
     <ProjectContext.Provider
       value={{
         projects,
+        setProjects,
         selectedProject,
         setSelectedProject,
-        fetchProjects,
-        isLoading,
       }}
     >
       {children}
     </ProjectContext.Provider>
   );
-}
+};
 
-export function useProject() {
+export const useProject = () => {
   const context = useContext(ProjectContext);
   if (context === undefined) {
     throw new Error("useProject must be used within a ProjectProvider");
   }
   return context;
-}
+};

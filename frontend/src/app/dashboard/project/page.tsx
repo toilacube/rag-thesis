@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileIcon, defaultStyles } from "react-file-icon";
 import {
   FiArrowRight,
   FiPlus,
@@ -14,26 +12,9 @@ import { useProject } from "@/contexts/ProjectContext";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/use-toast";
 
-interface Document {
-  id: number;
-  file_name: string;
-  file_path: string;
-  file_size: number;
-  content_type: string;
-  knowledge_base_id: number;
-  created_at: string;
-  updated_at: string;
-  processing_tasks: any[];
-}
-
-export default function ProjectsPage() {
-  const {
-    projects,
-    fetchProjects,
-    isLoading,
-    selectedProject,
-    setSelectedProject,
-  } = useProject();
+const ProjectsPage = () => {
+  const { projects, setProjects, selectedProject, setSelectedProject } =
+    useProject();
   const { toast } = useToast();
 
   const handleDelete = async (id: number) => {
@@ -45,7 +26,7 @@ export default function ProjectsPage() {
         title: "Success",
         description: `Project deleted successfully (ID: ${response.project_id})`,
       });
-      fetchProjects();
+      setProjects(projects.filter((project) => project.id !== id));
     } catch (error) {
       console.error("Failed to delete project:", error);
       if (error instanceof ApiError) {
@@ -139,25 +120,16 @@ export default function ProjectsPage() {
           </div>
         ))}
 
-        {!isLoading && projects.length === 0 && (
+        {projects.length === 0 && (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
               No projects found. Create one to get started.
             </p>
           </div>
         )}
-
-        {isLoading && (
-          <div className="flex items-center justify-center py-12">
-            <div className="space-y-4">
-              <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto"></div>
-              <p className="text-muted-foreground animate-pulse">
-                Loading projects...
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
-}
+};
+
+export default ProjectsPage;

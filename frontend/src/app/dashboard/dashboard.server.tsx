@@ -1,13 +1,15 @@
-import { checkLoggedIn } from "@/utils/check-logged-in";
 import DashboardClient from "./dashboard.client";
-import { redirect } from "next/navigation";
+import { ProjectProvider } from "@/contexts/ProjectContext";
+import { getProjects } from "@/utils/get-projects";
 
 const Dashboard = async () => {
-  const isLoggedIn = await checkLoggedIn();
-  if (!isLoggedIn) {
-    redirect("/login");
-  }
-  return <DashboardClient />;
+  const projects = await getProjects();
+
+  return (
+    <ProjectProvider initialProjects={projects}>
+      <DashboardClient />
+    </ProjectProvider>
+  );
 };
 
 export default Dashboard;

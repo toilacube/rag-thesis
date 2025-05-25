@@ -27,8 +27,7 @@ interface Stats {
 
 const DashboardClient = () => {
   const [stats, setStats] = useState<Stats>({ projects: 0, chats: 0 });
-  const { projects, selectedProject, setSelectedProject, isLoading } =
-    useProject();
+  const { projects, selectedProject, setSelectedProject } = useProject();
 
   useEffect(() => {
     const fetchStats = async () => {
