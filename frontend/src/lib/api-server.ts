@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 interface FetchOptions extends Omit<RequestInit, "body" | "headers"> {
   data?: any;
   headers?: Record<string, string>;
+  token?: string;
 }
 
 export class ApiError extends Error {
@@ -30,11 +31,19 @@ const baseUrl = `http://${backendServer}:${backendPort}`;
 export async function fetchApi(path: string, options: FetchOptions = {}) {
   const url = new URL(path, baseUrl).href;
 
-  const { data, headers: customHeaders = {}, ...restOptions } = options;
+  const {
+    data,
+    headers: customHeaders = {},
+    token: inputToken,
+    ...restOptions
+  } = options;
 
-  const cookieStore = await cookies();
-  const token = cookieStore.get("token")?.value;
-  console.log("apisv", token);
+  let token = inputToken;
+
+  if (!token && typeof cookies === "function") {
+    const cookieStore = await cookies();
+    token = cookieStore.get("token")?.value;
+  }
 
   const headers: Record<string, string> = {
     ...(token && { Authorization: `Bearer ${token}` }),
