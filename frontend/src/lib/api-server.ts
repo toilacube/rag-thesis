@@ -69,10 +69,6 @@ export async function fetchApi(path: string, options: FetchOptions = {}) {
     const response = await fetch(url, config);
 
     if (response.status === 401) {
-      if (typeof window !== "undefined") {
-        cookieStore.delete("token");
-        // window.location.href = "/login";
-      }
       throw new ApiError(401, "Unauthorized - Please log in again");
     }
 
