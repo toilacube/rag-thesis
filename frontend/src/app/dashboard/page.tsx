@@ -3,12 +3,12 @@ import { ProjectProvider } from "@/contexts/project-provider";
 import { getProjects } from "@/utils/get-projects";
 
 const Dashboard = async () => {
-  const projects = await getProjects();
+  // const projects = await getProjects();
 
   return (
-    <ProjectProvider initialProjects={projects}>
+    // <ProjectProvider initialProjects={projects}>
       <DashboardClient />
-    </ProjectProvider>
+    // </ProjectProvider>
   );
 };
 

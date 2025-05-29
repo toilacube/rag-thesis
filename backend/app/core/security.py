@@ -27,7 +27,7 @@ def createAccessToken(data: dict, expires_delta: int = None):
     """
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now() + timedelta(minutes=expires_delta)
+        expire = datetime.now() + timedelta(days=expires_delta)
     else:
         expire = datetime.now() + timedelta(days=30)
     to_encode.update({"exp": expire})

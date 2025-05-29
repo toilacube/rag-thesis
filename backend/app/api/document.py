@@ -317,3 +317,98 @@ async def search_document_chunks(
     except Exception as e:
         logger.error(f"Unexpected error during Qdrant search: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during search.")
+
+import os
+import json
+import boto3
+from fastapi.responses import PlainTextResponse
+from urllib.parse import urlparse
+
+@router.get(
+    "/{document_id}/markdown",
+    response_class=PlainTextResponse,
+    summary="Get markdown content for a document",
+    description="Retrieves the extracted/converted markdown content for a document. Returns plain text markdown."
+)
+async def get_document_markdown(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    app_config: dict = Depends(getConfig)
+):
+    # First get the document
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    
+    # Check for permission to view the document (like in get_document endpoint)
+    temp_permission_check_decorator = require_permission("view_project", project_id_param="project_id_for_check")
+    
+    async def placeholder_func(project_id_for_check: int, user: User, session: Session):
+        return document
+        
+    await temp_permission_check_decorator(placeholder_func)(project_id_for_check=document.project_id, current_user=current_user, db=db)
+    
+    # Check if markdown_s3_link exists
+    if not document.markdown_s3_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Markdown content not available for this document"
+        )
+    
+    # Get markdown content from S3 or local file depending on the link format
+    markdown_content = ""
+    if document.markdown_s3_link.startswith("s3://"):
+        # Parse S3 URL
+        parsed_url = urlparse(document.markdown_s3_link)
+        bucket_name = parsed_url.netloc
+        s3_key = parsed_url.path.lstrip("/")
+        
+        # Create S3 client
+        endpoint_url = app_config.MINIO_ENDPOINT
+        access_key = app_config.MINIO_ACCESS_KEY
+        secret_key = app_config.MINIO_SECRET_KEY
+        
+        if not all([endpoint_url, access_key, secret_key, bucket_name]):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="S3 storage not properly configured"
+            )
+            
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name='us-east-1', 
+            config=boto3.session.Config(signature_version='s3v4')
+        )
+        
+        try:
+            response = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+            markdown_content = response['Body'].read().decode('utf-8')
+        except Exception as e:
+            logger.error(f"Error retrieving markdown content from S3: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retrieve markdown content: {str(e)}"
+            )
+    else:
+        # Assuming it's a local file path
+        if not os.path.exists(document.markdown_s3_link):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Markdown file not found at the specified location"
+            )
+        
+        try:
+            with open(document.markdown_s3_link, 'r', encoding='utf-8') as f:
+                markdown_content = f.read()
+        except Exception as e:
+            logger.error(f"Error reading local markdown file: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to read markdown content: {str(e)}"
+            )
+    
+    return markdown_content

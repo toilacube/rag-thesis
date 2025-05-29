@@ -39,7 +39,7 @@ class LLMService:
             # LLMFactory now returns AsyncOpenAI client directly for supported providers
             client: AsyncOpenAI
             client, resolved_model_name = LLMFactory.create_async_client(
-                app_config=self.app_config,
+                # app_config=self.app_config,
                 provider=selected_provider
             )
             
@@ -105,7 +105,7 @@ class LLMService:
         selected_provider = self.app_config.CHAT_PROVIDER
         client: AsyncOpenAI
         client, resolved_model_name = LLMFactory.create_async_client(
-            app_config=self.app_config, provider=selected_provider
+            provider=selected_provider
         )
         
         messages_for_decision = [{"role": "user", "content": prompt}]

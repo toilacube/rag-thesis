@@ -125,6 +125,7 @@ class Document(Base):
     content_type = Column(String(100))
     file_hash = Column(String(64))
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    markdown_s3_link = Column(String(255), nullable=True) # Link to the extracted markdown text (S3 or local path)
     created_at = Column(DateTime, default=datetime.now(UTC)) # When document record (post-processing) is created
     updated_at = Column(DateTime, default=datetime.now(UTC), onupdate=datetime.now(UTC))
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False) # User who initiated the upload

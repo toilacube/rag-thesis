@@ -50,3 +50,18 @@ class ChatPromptFactory:
         """
         data = {"history": history, "user_question": user_question}
         return ChatPromptFactory._load_and_render("normal_answer.mustache", data)
+
+    @staticmethod
+    def to_markdown_prompt() -> str:
+        """
+        Generates the prompt for converting document content to Markdown.
+        """
+        template_file_path = BASE_DIR / "templates" / "prompts" / "to-markdown.mustache"
+        try:
+            with open(template_file_path, "r", encoding="utf-8") as f:
+                prompt_template = f.read()
+            return pystache.render(prompt_template)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Prompt template not found: {template_file_path}")
+        except Exception as e:
+            raise Exception(f"Error loading to-markdown prompt template: {e}")

@@ -31,6 +31,7 @@ class DocumentResponse(BaseModel):
     content_type: Optional[str] = None
     file_hash: Optional[str] = None
     project_id: int
+    markdown_s3_link: Optional[str] = None  # Link to the extracted markdown text
     created_at: datetime
     updated_at: datetime
     uploaded_by: int
@@ -64,6 +65,7 @@ class DocumentWithStatusResponse(BaseModel):
     content_type: Optional[str] = None
     file_hash: Optional[str] = None
     project_id: int
+    markdown_s3_link: Optional[str] = None  # Link to the extracted markdown text
     created_at: datetime # Document creation time
     updated_at: datetime # Document update time
     uploaded_by: int

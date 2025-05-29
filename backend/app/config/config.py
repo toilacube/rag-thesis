@@ -71,6 +71,7 @@ class Config:
     # Default LLM settings
     LLM_DEFAULT_TEMPERATURE: float = float(os.environ.get("LLM_DEFAULT_TEMPERATURE", 0.7))
     LLM_DEFAULT_MAX_TOKENS: int = int(os.environ.get("LLM_DEFAULT_MAX_TOKENS", 1500))
+    LLM_INPUT_CHUNK_MAX_WORDS: int = int(os.environ.get("LLM_INPUT_CHUNK_MAX_WORDS", 2000)) # Maximum words per chunk for LLM input processing.
 
 class DevelopmentConfig(Config):
     DEBUG = True

@@ -2,7 +2,9 @@ import asyncio
 import json
 import logging
 import os
+import re # Added import
 import shutil
+import sys
 import time # For retries
 from datetime import UTC, datetime
 from typing import Optional
@@ -18,6 +20,8 @@ from app.services.chunking import chunk_markdown, save_chunks_to_database
 from app.services.qdrant_service import QdrantService # Import, don't use get_qdrant_service directly in global scope
 from app.services.rabbitmq import RabbitMQService # For type hinting, actual instance created locally
 from markitdown import MarkItDown # Assuming this is the correct import
+from app.llm_providers.prompt_factory import ChatPromptFactory # Added for Markdown conversion
+from app.llm_providers.llm_factory import LLMFactory # Added for LLM client
 
 # Configure logging for the consumer
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -50,6 +54,40 @@ def _create_s3_client_for_consumer(config_obj):
     except Exception as e:
         logger.error(f"Error initializing S3 client for consumer: {e}")
         return None, None
+
+def split_by_sentence(text, max_words=2000):
+    # Split text into sentences (basic rule-based approach)
+    sentences = re.findall(r'[^.!?]+[.!?]?', text.strip())
+    
+    chunks = []
+    current_chunk = []
+    current_word_count = 0
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence: # Skip empty sentences
+            continue
+        word_count = len(sentence.split())
+
+        if current_word_count + word_count > max_words and current_chunk: # Ensure current_chunk is not empty before appending
+            chunks.append(' '.join(current_chunk))
+            current_chunk = [sentence]
+            current_word_count = word_count
+        elif current_word_count + word_count <= max_words: # Only add if it fits
+            current_chunk.append(sentence)
+            current_word_count += word_count
+        else: # Sentence itself is too long, add it as its own chunk
+            if current_chunk: # Append previous chunk first
+                 chunks.append(' '.join(current_chunk))
+            chunks.append(sentence)
+            current_chunk = []
+            current_word_count = 0
+
+
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+
+    return chunks
 
 async def _update_upload_status(db_session: Session, upload_id: int, status: str, error_message: Optional[str] = None, document_id: Optional[int] = None):
     """Safely updates DocumentUpload status and associated document_id if provided."""
@@ -144,15 +182,124 @@ async def process_message_callback(ch, method, properties, body, qdrant_service_
         # 3. Convert document to Markdown
         markdown_content = ""
         try:
-            md_converter = MarkItDown(enable_plugins=False)
+            # Step 1: Convert with MarkItDown
+            logger.info(f"Attempting MarkItDown conversion for {doc_upload.file_name}.")
+            md_converter = MarkItDown(enable_plugins=False) # Consider if plugins are needed
             conversion_result = md_converter.convert(temp_file_path)
-            if not conversion_result or not conversion_result.markdown:
-                raise Exception(f"MarkItDown conversion failed or produced no markdown for {doc_upload.file_name}.")
-            markdown_content = conversion_result.markdown
-            logger.info(f"Successfully converted {doc_upload.file_name} to markdown for upload {upload_id}")
+
+            if conversion_result and conversion_result.markdown and conversion_result.markdown.strip():
+                markdown_from_markitdown = conversion_result.markdown
+                logger.info(f"MarkItDown successfully converted {doc_upload.file_name} to initial markdown.")
+            else:
+                # If MarkItDown fails or returns empty, we might still try LLM with raw content if possible,
+                # or handle as an error. For now, let's log and proceed, LLM might still work with raw.
+                logger.warning(f"MarkItDown conversion failed or produced empty markdown for {doc_upload.file_name}.")
+                markdown_from_markitdown = "" # Ensure it's an empty string
+
+            # Step 2: Refine with LLM
+            # The LLM will now try to refine the MarkItDown output, or convert raw if MarkItDown failed.
+            # Determine content for LLM: MarkItDown output if available, otherwise raw file content.
+            
+            content_for_llm = markdown_from_markitdown
+            if not content_for_llm.strip(): # If MarkItDown output was empty, try to read raw file content
+                logger.info(f"MarkItDown output was empty for {doc_upload.file_name}. Reading raw file content for LLM.")
+                try:
+                    with open(temp_file_path, 'rb') as f:
+                        raw_bytes = f.read()
+                    try:
+                        raw_content_for_llm = raw_bytes.decode('utf-8')
+                    except UnicodeDecodeError:
+                        logger.warning(f"UTF-8 decoding failed for {doc_upload.file_name} (LLM fallback). Trying latin-1.")
+                        try:
+                            raw_content_for_llm = raw_bytes.decode('latin-1')
+                        except UnicodeDecodeError:
+                            logger.error(f"Could not decode file content for {doc_upload.file_name} (LLM fallback) with utf-8 or latin-1.")
+                            raw_content_for_llm = ""
+                    content_for_llm = raw_content_for_llm
+                except Exception as e_read:
+                    logger.error(f"Error reading raw file content for LLM fallback for {doc_upload.file_name}: {e_read}")
+                    content_for_llm = "" # Ensure it's empty if read fails
+
+            final_markdown_content = ""
+            if content_for_llm.strip():
+                logger.info(f"Attempting LLM refinement/conversion for {doc_upload.file_name}.")
+                to_markdown_prompt_str = ChatPromptFactory.to_markdown_prompt()
+                client, model = LLMFactory.create_async_client('gemini')
+                
+                content_chunks = split_by_sentence(content_for_llm) # Split content
+                processed_chunks = []
+
+                for chunk_index, chunk in enumerate(content_chunks):
+                    if not chunk.strip():
+                        continue
+                    logger.info(f"Processing chunk {chunk_index + 1}/{len(content_chunks)} for {doc_upload.file_name}")
+                    completion_kwargs = {
+                        "messages": [
+                            {"role": "user", "content": chunk},
+                            {"role": "developer", "content": to_markdown_prompt_str}
+                        ],
+                        "temperature": 0.5,
+                        "model": model,
+                    }
+                    
+                    try:
+                        response = await client.chat.completions.create(**completion_kwargs)
+                        if response and response.choices and response.choices[0].message and response.choices[0].message.content:
+                            processed_chunks.append(response.choices[0].message.content)
+                            logger.info(f"LLM successfully processed chunk {chunk_index + 1} for {doc_upload.file_name}.")
+                        else:
+                            logger.warning(f"LLM failed to process chunk {chunk_index + 1} for {doc_upload.file_name} or returned empty. Skipping this chunk.")
+                    except Exception as e_llm_chunk:
+                        logger.error(f"Error processing chunk {chunk_index + 1} with LLM for {doc_upload.file_name}: {e_llm_chunk}")
+                        # Optionally, decide if you want to append the original chunk or skip
+                        # For now, skipping if LLM fails for a chunk.
+
+                if processed_chunks:
+                    final_markdown_content = "\\n\\n".join(processed_chunks) # Join processed chunks
+                    logger.info(f"LLM successfully refined/converted content for {doc_upload.file_name} to markdown from {len(content_chunks)} chunks.")
+                else:
+                    logger.warning(f"LLM failed to process any chunks for {doc_upload.file_name}. Using MarkItDown output if available.")
+                    final_markdown_content = markdown_from_markitdown # Fallback to MarkItDown's direct output
+            else:
+                logger.warning(f"No content available (neither from MarkItDown nor raw file) for LLM processing for {doc_upload.file_name}. Markdown will be empty.")
+                final_markdown_content = "" # Ensure it's empty
+
+            markdown_content = final_markdown_content # Assign to the variable used later
+
+            # Save the refined markdown to S3 (or local storage if S3 is not configured)
+            if markdown_content.strip():
+                markdown_file_name = f"{doc_upload.file_hash}.md"
+                if s3_client and s3_bucket_name:
+                    # Define a specific path for markdown files in S3
+                    markdown_s3_path = f"markdowns/project_{doc_upload.project_id}/{doc_upload.file_hash}/{markdown_file_name}"
+                    s3_client.put_object(
+                        Bucket=s3_bucket_name,
+                        Key=markdown_s3_path,
+                        Body=markdown_content.encode('utf-8'),
+                        ContentType='text/markdown'
+                    )
+                    document_record.markdown_s3_link = f"s3://{s3_bucket_name}/{markdown_s3_path}"
+                    logger.info(f"Markdown for document {document_record.id} saved to S3: {document_record.markdown_s3_link}")
+                else:
+                    # Define a specific path for markdown files in local storage
+                    perm_markdown_dir = os.path.join(os.getcwd(), "permanent_storage", "markdowns", f"project_{doc_upload.project_id}", doc_upload.file_hash)
+                    os.makedirs(perm_markdown_dir, exist_ok=True)
+                    perm_markdown_path = os.path.join(perm_markdown_dir, markdown_file_name)
+                    with open(perm_markdown_path, "w", encoding="utf-8") as md_file:
+                        md_file.write(markdown_content)
+                    document_record.markdown_s3_link = perm_markdown_path
+                    logger.info(f"Markdown for document {document_record.id} saved locally: {document_record.markdown_s3_link}")
+                db.commit()
+            
+            logger.info(f"Successfully processed markdown conversion for {doc_upload.file_name} for upload {upload_id}")
+            
         except Exception as e:
-            logger.error(f"Error converting document to markdown for upload {upload_id}: {e}", exc_info=True)
-            raise Exception(f"Markdown conversion error: {e}")
+            db.rollback()  # Rollback any potential partial commit
+            logger.error(f"Error during markdown conversion or saving for upload {upload_id}: {e}", exc_info=True)
+            await _update_upload_status(db, upload_id, "error", f"Markdown conversion/saving failed: {e}", document_id=document_record.id)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            db.close()
+            return  # Stop further processing for this message
 
         if not markdown_content.strip():
             logger.warning(f"Markdown content is empty for upload {upload_id}, document {document_record.id}. Skipping chunking.")

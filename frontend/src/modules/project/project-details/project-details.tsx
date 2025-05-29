@@ -11,7 +11,7 @@ const ProjectDetails = () => {
   const { projects, setProjects, selectedProject, setSelectedProject } =
     useProject();
   const { toast } = useToast();
-
+  console.log("toilacube:", projects);
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this project?")) return;
 
