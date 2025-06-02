@@ -1,7 +1,42 @@
+interface DocumentUploadResult {
+  file_name: string;
+  status: "queued" | "exists" | "error";
+  upload_id: number | null;
+  document_id: number | null;
+  is_exist: boolean;
+  error: string | null;
+}
+
+interface ProcessingStatusDetail {
+  upload_id: number;
+  file_name: string;
+  upload_status: "queued" | "processing" | "completed" | "error" | "not_found";
+  upload_error: string | null;
+  document_id: number | null;
+}
+
+interface UploadFileStatus {
+  id: string; // Unique ID for UI key, e.g., file.name + file.lastModified
+  file: File;
+  uiStatus:
+    | "pending_selection"
+    | "uploading_to_server"
+    | "awaits_processing"
+    | "processing_on_server"
+    | "completed_success"
+    | "completed_exists"
+    | "failed_upload"
+    | "failed_processing";
+  serverUploadId: number | null;
+  serverDocumentId: number | null;
+  errorMessage: string | null;
+  progress?: number;
+}
+
 // Relevant for document-upload-steps.tsx and document-list.tsx
 
 // From: POST /api/document/upload (Array of these)
-export interface DocumentUploadResult {
+interface DocumentUploadResult {
   file_name: string;
   status: "queued" | "exists" | "error";
   upload_id: number | null;
@@ -11,7 +46,7 @@ export interface DocumentUploadResult {
 }
 
 // From: GET /api/document/upload/status (Value in the map for each upload_id)
-export interface ProcessingStatusDetail {
+interface ProcessingStatusDetail {
   upload_id: number;
   file_name: string;
   upload_status: "queued" | "processing" | "completed" | "error" | "not_found";
@@ -20,14 +55,14 @@ export interface ProcessingStatusDetail {
 }
 
 // The overall response type for GET /api/document/upload/status
-export type ProcessingStatusResponseMap = Record<
+type ProcessingStatusResponseMap = Record<
   string,
   ProcessingStatusDetail | { status: "not_found"; detail: string }
 >;
 
 // From: GET /api/document/project/{project_id}/with-status (Array of these)
 // This will be used in document-list.tsx, replacing the old Document interface
-export interface DocumentWithStatus {
+interface DocumentWithStatus {
   id: number | null; // Document ID (if processed, else null)
   file_path: string | null;
   file_name: string; // Original upload filename
@@ -44,7 +79,7 @@ export interface DocumentWithStatus {
 }
 
 // Updated UI state for files in document-upload-steps.tsx
-export interface UploadFileStatus {
+interface UploadFileStatus {
   id: string; // Unique ID for UI key, e.g., file.name + file.lastModified
   file: File;
   uiStatus:

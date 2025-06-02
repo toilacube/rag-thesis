@@ -2,8 +2,8 @@
 
 import { useParams } from "next/navigation";
 import { useState, useCallback } from "react";
-import { DocumentUploadSteps } from "@/modules/knowledge-base/document-upload-steps"; // Ensure path is correct
-import { DocumentList } from "@/modules/knowledge-base/document-list"; // Ensure path is correct
+import { DocumentUploadSteps } from "@/modules/document-upload-steps"; // Ensure path is correct
+import { DocumentList } from "@/modules/document-list";
 import {
   Dialog,
   DialogContent,
@@ -71,9 +71,9 @@ export default function ProjectDetailPage() {
             <DialogHeader>
               <DialogTitle>Add Documents to Knowledge Base</DialogTitle>
               <DialogDescription>
-                Upload documents to "
-                {currentProject?.project_name || `Project ID ${projectId}`}".
-                Supported formats: PDF, DOCX, DOC, TXT, MD, XLS, XLSX.
+                {`Upload documents to "`}
+                {currentProject?.project_name || `Project ID ${projectId}`}
+                {`". Supported formats: PDF, DOCX, DOC, TXT, MD, XLS, XLSX.`}
               </DialogDescription>
             </DialogHeader>
             <div className="flex-grow overflow-y-auto py-4">

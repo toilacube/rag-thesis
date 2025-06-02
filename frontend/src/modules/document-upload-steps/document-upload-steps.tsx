@@ -4,80 +4,32 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { FileIcon, defaultStyles } from "react-file-icon";
 import { Button } from "@/components/button";
 import { Card } from "@/components/card";
-import { Progress } from "@/components/progress";
-// Tabs and Accordion are removed as per "ignore preview logic" and simplified steps
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/tabs";
-// import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/accordion";
-import { Input } from "@/components/input"; // Potentially for future settings, not for chunking now
-import { Label } from "@/components/label"; // Potentially for future settings
 import { useToast } from "@/components/use-toast";
 import {
   FiLoader,
   FiUpload,
   FiX,
-  FiSettings, // Might be repurposed or removed
-  FiFileText, // Might be repurposed or removed
   FiCheckCircle,
   FiAlertCircle,
   FiClock,
   FiHelpCircle,
 } from "react-icons/fi";
 import { cn } from "@/lib/utils";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { useDropzone } from "react-dropzone";
 import { Badge } from "@/components/badge";
-
-// --- START: TypeScript Interfaces (can be moved to a types file) ---
-export interface DocumentUploadResult {
-  file_name: string;
-  status: "queued" | "exists" | "error";
-  upload_id: number | null;
-  document_id: number | null;
-  is_exist: boolean;
-  error: string | null;
-}
-
-export interface ProcessingStatusDetail {
-  upload_id: number;
-  file_name: string;
-  upload_status: "queued" | "processing" | "completed" | "error" | "not_found";
-  upload_error: string | null;
-  document_id: number | null;
-}
-
-export type ProcessingStatusResponseMap = Record<
-  string,
-  ProcessingStatusDetail | { status: "not_found"; detail: string }
->;
-
-export interface UploadFileStatus {
-  id: string; // Unique ID for UI key, e.g., file.name + file.lastModified
-  file: File;
-  uiStatus:
-    | "pending_selection"
-    | "uploading_to_server"
-    | "awaits_processing"
-    | "processing_on_server"
-    | "completed_success"
-    | "completed_exists"
-    | "failed_upload"
-    | "failed_processing";
-  serverUploadId: number | null;
-  serverDocumentId: number | null;
-  errorMessage: string | null;
-  progress?: number;
-}
-// --- END: TypeScript Interfaces ---
+import { getStatusDocument } from "./utils/get-status-document";
+import { uploadDocument } from "./utils/upload-document";
 
 interface DocumentUploadStepsProps {
   projectId: number;
   onComplete?: () => void;
 }
 
-export function DocumentUploadSteps({
+const DocumentUploadSteps = ({
   projectId,
   onComplete,
-}: DocumentUploadStepsProps) {
+}: DocumentUploadStepsProps) => {
   const [files, setFiles] = useState<UploadFileStatus[]>([]);
   const [isUploading, setIsUploading] = useState(false); // For the initial POST /upload
   const { toast } = useToast();
@@ -151,11 +103,7 @@ export function DocumentUploadSteps({
       // If you need progress, you'd use XHR or a library.
       // For simplicity, we'll just mark it as fully "uploading".
 
-      const results = (await api.post(
-        `/api/document/upload`,
-        formData,
-        { headers: {} }, // Content-Type will be set automatically for FormData
-      )) as DocumentUploadResult[];
+      const results = (await uploadDocument(formData)) as DocumentUploadResult[];
 
       let allUploadsSuccessfulOrExist = true;
       let hasQueuedFiles = false;
@@ -265,9 +213,7 @@ export function DocumentUploadSteps({
         queryParams.append("upload_ids", id.toString()),
       );
 
-      const statusMap = (await api.get(
-        `/api/document/upload/status?${queryParams.toString()}`,
-      )) as ProcessingStatusResponseMap;
+      const statusMap = (await getStatusDocument(queryParams)) as ProcessingStatusResponseMap;
 
       setFiles((prevFiles) =>
         prevFiles.map((fs) => {
@@ -595,3 +541,5 @@ export function DocumentUploadSteps({
     </div>
   );
 }
+
+export default DocumentUploadSteps

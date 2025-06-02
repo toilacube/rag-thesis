@@ -1,12 +1,8 @@
-import { ProjectProvider } from "@/contexts/project-provider";
 import { ProjectDetails } from "@/modules/project/project-details";
-import { getProjects } from "@/utils/get-projects";
 import Link from "next/link";
 import { FiPlus } from "react-icons/fi";
 
 const ProjectsPage = async () => {
-  const projects = await getProjects();
-
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
@@ -24,9 +20,7 @@ const ProjectsPage = async () => {
           New Project
         </Link>
       </div>
-      <ProjectProvider initialProjects={projects}>
-        <ProjectDetails />
-      </ProjectProvider>
+      <ProjectDetails />
     </div>
   );
 };

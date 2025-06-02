@@ -24,7 +24,7 @@ const LoginPage = () => {
               href="/register"
               className="text-sm font-medium text-gray-600 hover:text-gray-500"
             >
-              Don't have an account? Create one now
+              {`Don't have an account? Create one now`}
             </Link>
           </div>
         </div>

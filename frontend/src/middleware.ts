@@ -9,9 +9,9 @@ export const middleware = async (request: NextRequest) => {
 
   const isPrivateRoute = getIsPrivateRoute(pathname);
 
-  if (isPrivateRoute) {
+  if (isPrivateRoute && token) {
     const isLoggedIn = await checkLoggedIn(token);
-    if (!isLoggedIn || !token) {
+    if (!isLoggedIn) {
       const loginUrl = new URL("/login", request.url);
       return NextResponse.redirect(loginUrl);
     }

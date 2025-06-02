@@ -64,7 +64,7 @@ const ProjectDetails = () => {
                 <FiSettings className="h-4 w-4" />
               </Link>
               <Link
-                href={`/dashboard/test-retrieval/${project.id}`}
+                href={`/dashboard/project/${project.id}`}
                 className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
               >
                 <FiSearch className="h-4 w-4" />

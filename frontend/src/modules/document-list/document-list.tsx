@@ -20,7 +20,8 @@ import {
   FiFileText,
   FiHelpCircle,
 } from "react-icons/fi"; // Added icons
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { getDocumentList } from "./utils/get-document-list";
 
 // --- START: TypeScript Interfaces (can be moved to a types file) ---
 export interface DocumentWithStatus {
@@ -44,7 +45,7 @@ interface DocumentListProps {
   projectId: number;
 }
 
-export function DocumentList({ projectId }: DocumentListProps) {
+const DocumentList = ({ projectId }: DocumentListProps) => {
   const [documents, setDocuments] = useState<DocumentWithStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,10 +54,7 @@ export function DocumentList({ projectId }: DocumentListProps) {
     const fetchDocuments = async () => {
       try {
         setLoading(true);
-        // Use the new endpoint to get documents with their processing status
-        const data = await api.get(
-          `/api/document/project/${projectId}/with-status`,
-        );
+        const data = await getDocumentList(projectId)
         setDocuments(data as DocumentWithStatus[]);
         setError(null);
       } catch (error) {
@@ -226,3 +224,5 @@ export function DocumentList({ projectId }: DocumentListProps) {
     </Table>
   );
 }
+
+export default DocumentList
