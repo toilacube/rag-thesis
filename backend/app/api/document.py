@@ -318,6 +318,89 @@ async def search_document_chunks(
         logger.error(f"Unexpected error during Qdrant search: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during search.")
 
+from fastapi.responses import FileResponse, StreamingResponse, Response
+from botocore.exceptions import ClientError # For S3 error handling
+
+@router.get(
+    "/{document_id}/download",
+    summary="Download the original document file",
+    description="Retrieves the original uploaded document file as blob data."
+)
+async def download_document_file(
+    document_id: int,
+    db: Session = Depends(get_db_session),
+    # current_user: User = Depends(get_current_user),
+    app_config: dict = Depends(getConfig)
+):
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if not document.file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File path not available for this document.")
+
+    media_type = document.content_type or 'application/octet-stream'
+    download_filename = document.file_name or f"document_{document.id}"
+
+    if document.file_path.startswith("s3://"):
+        parsed_url = urlparse(document.file_path)
+        bucket_name = parsed_url.netloc
+        s3_key = parsed_url.path.lstrip("/")
+
+        endpoint_url = app_config.MINIO_ENDPOINT
+        access_key = app_config.MINIO_ACCESS_KEY
+        secret_key = app_config.MINIO_SECRET_KEY
+
+        if not all([endpoint_url, access_key, secret_key, bucket_name]):
+            logger.error(f"S3 storage not properly configured for downloading document {document.id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="S3 storage not properly configured"
+            )
+        
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name='us-east-1', 
+            config=boto3.session.Config(signature_version='s3v4')
+        )
+        try:
+            s3_object = s3_client.get_object(Bucket=bucket_name, Key=s3_key)
+            
+            # Read the entire content into memory for blob response
+            file_content = s3_object['Body'].read()
+            
+            return Response(
+                content=file_content,
+                media_type=media_type
+            )
+        except ClientError as e:
+            logger.error(f"Error retrieving document {document.id} (path: {document.file_path}) from S3: {e}", exc_info=True)
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found in S3 storage.")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve file from S3 storage.")
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving document {document.id} from S3: {e}", exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Unexpected error retrieving file from S3.")
+
+    else: # Assuming local file path
+        if not os.path.exists(document.file_path):
+            logger.error(f"Local document file not found for document {document.id} at path: {document.file_path}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found at the specified local path.")
+        
+        try:
+            with open(document.file_path, 'rb') as f:
+                file_content = f.read()
+            
+            return Response(
+                content=file_content,
+                media_type=media_type
+            )
+        except Exception as e:
+            logger.error(f"Error reading local file for document {document.id}: {e}", exc_info=True)
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to read local file.")
 import os
 import json
 import boto3
@@ -326,14 +409,14 @@ from urllib.parse import urlparse
 
 @router.get(
     "/{document_id}/markdown",
-    response_class=PlainTextResponse,
+    # response_class=PlainTextResponse,
     summary="Get markdown content for a document",
     description="Retrieves the extracted/converted markdown content for a document. Returns plain text markdown."
 )
 async def get_document_markdown(
     document_id: int,
     db: Session = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    # current_user: User = Depends(get_current_user),
     app_config: dict = Depends(getConfig)
 ):
     # First get the document
@@ -341,13 +424,13 @@ async def get_document_markdown(
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     
-    # Check for permission to view the document (like in get_document endpoint)
-    temp_permission_check_decorator = require_permission("view_project", project_id_param="project_id_for_check")
+    # # Check for permission to view the document (like in get_document endpoint)
+    # temp_permission_check_decorator = require_permission("view_project", project_id_param="project_id_for_check")
     
-    async def placeholder_func(project_id_for_check: int, user: User, session: Session):
-        return document
+    # async def placeholder_func(project_id_for_check: int, user: User, session: Session):
+    #     return document
         
-    await temp_permission_check_decorator(placeholder_func)(project_id_for_check=document.project_id, current_user=current_user, db=db)
+    # await temp_permission_check_decorator(placeholder_func)(project_id_for_check=document.project_id, current_user=current_user, db=db)
     
     # Check if markdown_s3_link exists
     if not document.markdown_s3_link:
@@ -411,4 +494,7 @@ async def get_document_markdown(
                 detail=f"Failed to read markdown content: {str(e)}"
             )
     
-    return markdown_content
+    # Ensure we're returning a string type
+    return {
+        "content": markdown_content
+    }

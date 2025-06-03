@@ -86,8 +86,12 @@ export async function fetchApi(path: string, options: FetchOptions = {}) {
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
       return await response.json();
+    } else if (contentType && contentType.includes("text/plain")) {
+      return await response.text();
+    } else if (response.ok && response.body) { // For file downloads or other binary data
+      return await response.blob();
     } else {
-      // For empty responses (common with DELETE requests)
+      // For empty responses (common with DELETE requests) or other non-handled types
       return { success: true, status: response.status };
     }
   } catch (error) {

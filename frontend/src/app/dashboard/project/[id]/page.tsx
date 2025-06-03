@@ -66,7 +66,6 @@ export default function ProjectDetailPage() {
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-4xl min-h-[60vh] flex flex-col">
-            {" "}
             {/* Increased min height */}
             <DialogHeader>
               <DialogTitle>Add Documents to Knowledge Base</DialogTitle>
@@ -77,7 +76,6 @@ export default function ProjectDetailPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="flex-grow overflow-y-auto py-4">
-              {" "}
               {/* Make the steps component scrollable */}
               <DocumentUploadSteps
                 projectId={projectId}
@@ -89,7 +87,6 @@ export default function ProjectDetailPage() {
       </div>
 
       <div className="mt-2">
-        {" "}
         {/* Reduced top margin as title is separate now */}
         <DocumentList key={refreshKey} projectId={projectId} />
       </div>
