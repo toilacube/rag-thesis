@@ -147,5 +147,46 @@ class LLMService:
             logger.error(f"Error getting RAG decision from {selected_provider}: {e}", exc_info=True)
             return None
 
+    async def enrich_query_for_rag(self, history: List[Dict[str, str]], user_question: str) -> Optional[str]:
+        """
+        Uses LLM to enrich user query for better RAG retrieval. Non-streaming.
+        Returns enriched query string or None on error.
+        """
+        from app.llm_providers.prompt_factory import ChatPromptFactory # Local import
+        
+        prompt = ChatPromptFactory.query_enrichment_prompt(history, user_question)
+        
+        selected_provider = self.app_config.CHAT_PROVIDER
+        client: AsyncOpenAI
+        client, resolved_model_name = LLMFactory.create_async_client(
+            provider=selected_provider
+        )
+        
+        messages_for_enrichment = [{"role": "user", "content": prompt}]
+        
+        try:
+            logger.info(f"Requesting query enrichment from {selected_provider} model {resolved_model_name}")
+            completion_kwargs = {
+                "model": resolved_model_name,
+                "messages": messages_for_enrichment,
+                "temperature": 0.3,
+                # "max_tokens": 300,
+                # "stream": False
+            }
+
+            completion = await client.chat.completions.create(**completion_kwargs)
+            enriched_query = completion.choices[0].message.content
+            
+            if enriched_query and enriched_query.strip():
+                enriched_query = enriched_query.strip()
+                logger.info(f"Query enrichment successful. Original: '{user_question}' -> Enriched: '{enriched_query}'")
+                return enriched_query
+            else:
+                logger.warning(f"Query enrichment returned empty content")
+                return None
+        except Exception as e:
+            logger.error(f"Error enriching query with {selected_provider}: {e}", exc_info=True)
+            return None
+
 def get_llm_service(app_config: Config = Depends(getConfig)) -> LLMService:
     return LLMService(app_config)

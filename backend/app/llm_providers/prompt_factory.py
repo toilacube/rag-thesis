@@ -52,6 +52,15 @@ class ChatPromptFactory:
         return ChatPromptFactory._load_and_render("normal_answer.mustache", data)
 
     @staticmethod
+    def query_enrichment_prompt(history: List[Dict[str, str]], user_question: str) -> str:
+        """
+        Generates the prompt for enriching user queries for better RAG retrieval.
+        history: List of {"role": "user/assistant", "content": "..."}
+        """
+        data = {"history": history, "user_question": user_question}
+        return ChatPromptFactory._load_and_render("query_enrichment.mustache", data)
+
+    @staticmethod
     def to_markdown_prompt() -> str:
         """
         Generates the prompt for converting document content to Markdown.

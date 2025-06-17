@@ -13,6 +13,8 @@ export const loginAction = async (formData: FormData) => {
       password: password,
     });
     if (response.access_token) {
+      const cookieStore = await cookies();
+      cookieStore.set("token", response.access_token);
       // console.log("response.access_token", response.access_token); // Optional: keep for debugging if needed
       return { success: true, token: response.access_token };
     }

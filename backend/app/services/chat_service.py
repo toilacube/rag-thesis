@@ -184,8 +184,17 @@ class ChatService:
         if rag_decision and rag_decision.get("need_rag"):
             logger.info(f"Chat {chat_id}: RAG needed. Reason: {rag_decision.get('reason', 'N/A')}")
             try:
+                # Enrich the query for better vector search
+                enriched_query = await self.llm_service.enrich_query_for_rag(rag_decision_history, user_question)
+                search_query = enriched_query if enriched_query else user_question
+                
+                if enriched_query:
+                    logger.info(f"Chat {chat_id}: Using enriched query for vector search")
+                else:
+                    logger.info(f"Chat {chat_id}: Query enrichment failed, using original query")
+                
                 retrieved_qdrant_hits = self.qdrant_service.search_chunks(
-                    query_text=user_question, project_id=chat.project_id, limit=3 # Limit to 3 contexts for now
+                    query_text=search_query, project_id=chat.project_id, limit=7 # Limit to 3 contexts for now
                 )
                 if retrieved_qdrant_hits:
                     for i, hit in enumerate(retrieved_qdrant_hits):

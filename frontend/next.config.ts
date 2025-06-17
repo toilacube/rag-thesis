@@ -6,6 +6,9 @@ module.exports = {
     outputStandalone: true,
     skipMiddlewareUrlNormalize: true,
     skipTrailingSlashRedirect: true,
+    serverActions: {
+       bodySizeLimit: '50mb',
+    }
   },
   devIndicators: false,
 };

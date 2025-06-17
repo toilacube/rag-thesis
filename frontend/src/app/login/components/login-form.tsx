@@ -17,7 +17,7 @@ const LoginForm = () => {
     const formData = new FormData(e.currentTarget);
     const res = await loginAction(formData);
     if (res.success && res.token) {
-      localStorage.setItem("token", res.token);
+      // localStorage.setItem("token", res.token);
       router.push("/dashboard");
     } else {
       setError(res?.message || "Login failed. Please check your credentials.");

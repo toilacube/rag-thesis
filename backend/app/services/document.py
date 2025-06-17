@@ -209,7 +209,7 @@ class DocumentService:
         for upload, doc in uploads_and_docs:
             status_detail = {
                 "id": doc.id if doc else None, # Document ID
-                "file_path": doc.file_path if doc else None,
+                "file_path": doc.file_path if doc else "",
                 "file_name": upload.file_name, # Use upload's filename as it's the source
                 "file_size": doc.file_size if doc else upload.file_size,
                 "content_type": doc.content_type if doc else upload.content_type,

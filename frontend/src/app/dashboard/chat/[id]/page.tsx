@@ -486,7 +486,7 @@ export default function ChatInterfacePage() {
 
     const isUser = message.role === "user";
     const avatar = isUser ? (
-      <div className="w-8 h-8 rounded-full bg-primary flex-shrink-0 items-center justify-center text-primary-foreground self-start mt-1">
+      <div className="w-8 h-8 rounded-full bg-primary flex-shrink-0 flex items-center justify-center text-primary-foreground self-start mt-1">
         <FiUser className="h-5 w-5" />
       </div>
     ) : (
@@ -494,7 +494,7 @@ export default function ChatInterfacePage() {
         <img
           src="/logo.png"
           className="h-7 w-7 rounded-full object-cover"
-          alt="AI Assistant"
+          alt="AI"
         />
       </div>
     );

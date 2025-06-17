@@ -76,9 +76,6 @@ def upgrade():
     # Insert projects
     now = datetime.now()
     projects = [
-        ('Customer Support RAG', 'Knowledge base for customer support agents', now, now),
-        ('Internal Documentation', 'Company policies and procedures', now, now),
-        ('Product Documentation', 'User manuals and technical specifications', now, now),
     ]
 
     for name, description, created_at, updated_at in projects:
