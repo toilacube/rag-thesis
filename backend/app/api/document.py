@@ -4,7 +4,9 @@ from typing import List, Dict
 import hashlib # For hashing string content
 import os # For temp file operations
 import shutil # For temp file operations
+import boto3
 from datetime import UTC, datetime # For timestamps
+from urllib.parse import urlparse
 
 from app.dtos.documentDTO import (
     DocumentResponse, 
@@ -262,14 +264,38 @@ async def get_documents_by_project(
     summary="Get documents by project ID with their processing status",
     description="Retrieve all document uploads for a project, showing their current processing status and links to processed documents if available."
 )
-# @require_permission("view_project", project_id_param="project_id")
+@require_permission("view_project", project_id_param="project_id")
 async def get_documents_with_status_by_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
-    document_service: DocumentService = Depends(get_document_service)
+    document_service: DocumentService = Depends(get_document_service),
+    db: Session = Depends(get_db_session)
 ):
-    docs_with_status_dicts = await document_service.get_documents_with_status(project_id)
-    return [DocumentWithStatusResponse.model_validate(d) for d in docs_with_status_dicts]
+    # Check if project exists
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Project {project_id} not found")
+    
+    try:
+        docs_with_status_dicts = await document_service.get_documents_with_status(project_id)
+        
+        # Validate and convert to response models
+        response_list = []
+        for doc_dict in docs_with_status_dicts:
+            try:
+                response_list.append(DocumentWithStatusResponse.model_validate(doc_dict))
+            except Exception as e:
+                logger.error(f"Failed to validate document status response for document {doc_dict.get('id', 'unknown')}: {e}")
+                continue
+        
+        return response_list
+        
+    except Exception as e:
+        logger.error(f"Error retrieving documents with status for project {project_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail="Failed to retrieve document status information"
+        )
 
 
 @router.post(

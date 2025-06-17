@@ -58,18 +58,18 @@ class ProcessingStatusResponse(BaseModel): # Used for GET /upload/status
 
 
 class DocumentWithStatusResponse(BaseModel):
-    id: int # Document ID
-    file_path: str
+    id: int # Document ID if available, otherwise upload ID
+    file_path: str # Empty string if document not processed yet
     file_name: str
     file_size: Optional[int] = None
     content_type: Optional[str] = None
     file_hash: Optional[str] = None
     project_id: int
     markdown_s3_link: Optional[str] = None  # Link to the extracted markdown text
-    created_at: datetime # Document creation time
-    updated_at: datetime # Document update time
+    created_at: datetime # Document creation time or upload creation time
+    updated_at: datetime # Document update time or upload update time
     uploaded_by: int
-    processing_status: Optional[str] = None # Derived status: e.g., completed, processing, error, pending_upload
+    processing_status: Optional[str] = None # Derived status: e.g., completed, processing, error, pending, queued
     error_message: Optional[str] = None # Error from DocumentUpload if processing failed
     upload_id: Optional[int] = None # ID of the corresponding DocumentUpload entry
 

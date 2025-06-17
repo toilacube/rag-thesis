@@ -207,32 +207,34 @@ class DocumentService:
 
         results = []
         for upload, doc in uploads_and_docs:
+            # Determine processing status based on upload status and document existence
+            if upload.status == "completed" and doc:
+                processing_status = "completed"
+            elif upload.status == "error":
+                processing_status = "error"
+            elif upload.status in ["queued", "processing"]:
+                processing_status = upload.status
+            elif upload.status == "pending":
+                processing_status = "pending"
+            else:
+                processing_status = upload.status
+
             status_detail = {
-                "id": doc.id if doc else None, # Document ID
+                "id": doc.id if doc else upload.id,  # Use document ID if available, otherwise upload ID
                 "file_path": doc.file_path if doc else "",
-                "file_name": upload.file_name, # Use upload's filename as it's the source
+                "file_name": upload.file_name,
                 "file_size": doc.file_size if doc else upload.file_size,
                 "content_type": doc.content_type if doc else upload.content_type,
                 "file_hash": doc.file_hash if doc else upload.file_hash,
                 "project_id": upload.project_id,
-                "created_at": doc.created_at if doc else upload.created_at, # Show doc creation time if available
+                "markdown_s3_link": doc.markdown_s3_link if doc else None,
+                "created_at": doc.created_at if doc else upload.created_at,
                 "updated_at": doc.updated_at if doc else upload.updated_at,
                 "uploaded_by": upload.user_id,
-                "processing_status": upload.status,
+                "processing_status": processing_status,
                 "error_message": upload.error_message,
                 "upload_id": upload.id,
             }
-            # Refine processing_status
-            if doc and upload.status == "completed":
-                status_detail["processing_status"] = "completed"
-            elif upload.status in ["queued", "processing"]:
-                 status_detail["processing_status"] = upload.status
-            elif upload.status == "error":
-                status_detail["processing_status"] = "error"
-            elif not doc and upload.status == "pending": # Should be queued
-                status_detail["processing_status"] = "pending_queue" # Or just "pending"
-            else: # Fallback or initial upload state
-                status_detail["processing_status"] = upload.status
 
             results.append(status_detail)
         return results
