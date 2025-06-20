@@ -21,8 +21,8 @@ const LoginForm = () => {
       router.push("/dashboard");
     } else {
       setError(res?.message || "Login failed. Please check your credentials.");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -41,7 +41,7 @@ const LoginForm = () => {
             type="text"
             required
             disabled={loading}
-            className="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
             placeholder="Enter your email"
           />
         </div>
@@ -59,7 +59,7 @@ const LoginForm = () => {
             type="password"
             required
             disabled={loading}
-            className="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
             placeholder="Enter your password"
           />
         </div>

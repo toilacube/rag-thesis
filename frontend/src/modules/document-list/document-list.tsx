@@ -154,7 +154,7 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
         );
       case "processing":
         return (
-          <Badge variant="default" className="bg-blue-100 text-blue-700">
+          <Badge variant="default" className="bg-gray-100 text-gray-700">
             <FiLoader className="mr-1 inline animate-spin" /> Processing
           </Badge>
         );

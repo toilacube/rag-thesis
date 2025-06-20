@@ -8,7 +8,6 @@ import {
   FaPlus,
   FaUpload,
   FaBrain,
-  FaSearch,
   FaMagic,
 } from "react-icons/fa";
 import { useProject } from "@/contexts/project-provider";
@@ -19,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/select";
+import Link from "next/link";
 
 interface Stats {
   projects: number;
@@ -48,7 +48,7 @@ const DashboardClient = () => {
       <div className="mb-12 rounded-2xl bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-8 shadow-sm">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-4">
-            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent">
+            <h1 className="text-4xl font-bold tracking-tight bg-clip-text">
               Project Q&A Assistant
             </h1>
             <p className="text-slate-600 dark:text-slate-300 max-w-xl">
@@ -56,13 +56,13 @@ const DashboardClient = () => {
               projects, and get instant answers through natural conversations.
             </p>
           </div>
-          <a
+          <Link
             href="/dashboard/project/new"
-            className="inline-flex items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+            className="inline-flex items-center justify-center rounded-full bg-gray-600 px-6 py-3 text-sm font-medium text-white hover:bg-gray-700 transition-all shadow-lg shadow-gray-600/20"
           >
             <FaPlus className="mr-2 h-4 w-4" />
             New Project
-          </a>
+          </Link>
         </div>
 
         {/* Project selector dropdown */}
@@ -96,8 +96,8 @@ const DashboardClient = () => {
       <div className="grid gap-6 md:grid-cols-2 mb-12">
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all">
           <div className="flex items-center gap-6">
-            <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4">
-              <FaFolder className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            <div className="rounded-full bg-gray-100 dark:bg-gray-900/30 p-4">
+              <FaFolder className="h-8 w-8 text-gray-600 dark:text-gray-400" />
             </div>
             <div>
               <h3 className="text-4xl font-bold text-slate-900 dark:text-white">
@@ -108,19 +108,19 @@ const DashboardClient = () => {
               </p>
             </div>
           </div>
-          <a
+          <Link
             href="/dashboard/project"
-            className="mt-6 flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
+            className="mt-6 flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-sm font-medium"
           >
             View all projects
             <FaArrowRight className="ml-2 h-4 w-4" />
-          </a>
+          </Link>
         </div>
 
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all">
           <div className="flex items-center gap-6">
-            <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/30 p-4">
-              <FaComment className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+            <div className="rounded-full bg-gray-100 dark:bg-gray-900/30 p-4">
+              <FaComment className="h-8 w-8 text-gray-600 dark:text-gray-400" />
             </div>
             <div>
               <h3 className="text-4xl font-bold text-slate-900 dark:text-white">
@@ -131,13 +131,13 @@ const DashboardClient = () => {
               </p>
             </div>
           </div>
-          <a
+          <Link
             href="/dashboard/chat"
-            className="mt-6 flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-sm font-medium"
+            className="mt-6 flex items-center text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-sm font-medium"
           >
             View all chat sessions
             <FaArrowRight className="ml-2 h-4 w-4" />
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -145,12 +145,12 @@ const DashboardClient = () => {
         Quick Actions
       </h2>
       <div className="grid gap-6 md:grid-cols-3 mb-12">
-        <a
+        <Link
           href="/dashboard/project/new"
-          className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-blue-500 dark:hover:border-blue-500"
+          className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-gray-500 dark:hover:border-gray-500"
         >
-          <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-4 mb-4">
-            <FaBrain className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+          <div className="rounded-full bg-gray-100 dark:bg-gray-900/30 p-4 mb-4">
+            <FaBrain className="h-8 w-8 text-gray-600 dark:text-gray-400" />
           </div>
           <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
             Create Project
@@ -158,14 +158,14 @@ const DashboardClient = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 text-center">
             Start a new project repository for documents
           </p>
-        </a>
+        </Link>
 
-        <a
+        <Link
           href="/dashboard/project"
-          className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-indigo-500 dark:hover:border-indigo-500"
+          className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-gray-500 dark:hover:border-gray-500"
         >
-          <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/30 p-4 mb-4">
-            <FaUpload className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+          <div className="rounded-full bg-gray-100 dark:bg-gray-900/30 p-4 mb-4">
+            <FaUpload className="h-8 w-8 text-gray-600 dark:text-gray-400" />
           </div>
           <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
             Upload Documents
@@ -173,14 +173,14 @@ const DashboardClient = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 text-center">
             Add PDF, DOCX, MD or TXT files to your projects
           </p>
-        </a>
+        </Link>
 
-        <a
+        <Link
           href="/dashboard/chat/new"
-          className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-purple-500 dark:hover:border-purple-500"
+          className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all hover:border-gray-500 dark:hover:border-gray-500"
         >
-          <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-4 mb-4">
-            <FaMagic className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+          <div className="rounded-full bg-gray-100 dark:bg-gray-900/30 p-4 mb-4">
+            <FaMagic className="h-8 w-8 text-gray-600 dark:text-gray-400" />
           </div>
           <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
             Start Chatting
@@ -188,82 +188,7 @@ const DashboardClient = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 text-center">
             Get instant answers from your project documents with AI
           </p>
-        </a>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-8 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900 dark:text-white mb-6 flex items-center">
-          <FaSearch className="mr-3 h-5 w-5 text-blue-600 dark:text-blue-400" />
-          How It Works
-        </h2>
-        <div className="space-y-6">
-          <div className="flex items-start gap-6 p-6 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-semibold">
-              1
-            </div>
-            <div>
-              <h3 className="font-medium text-lg text-slate-900 dark:text-white mb-2">
-                Create a Project
-              </h3>
-              <p className="text-slate-600 dark:text-slate-300">
-                Start by creating a new project to organize your documents. Give
-                it a name and description.
-              </p>
-              <a
-                href="/dashboard/project/new"
-                className="mt-4 inline-flex items-center text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
-              >
-                Create now
-                <FaArrowRight className="ml-2 h-4 w-4" />
-              </a>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-6 p-6 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white font-semibold">
-              2
-            </div>
-            <div>
-              <h3 className="font-medium text-lg text-slate-900 dark:text-white mb-2">
-                Upload Your Documents
-              </h3>
-              <p className="text-slate-600 dark:text-slate-300">
-                Upload PDF, DOCX, MD or TXT files to your selected project. Our
-                system will process and index them for AI-powered retrieval.
-              </p>
-              <a
-                href="/dashboard/project"
-                className="mt-4 inline-flex items-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-sm font-medium"
-              >
-                Upload documents
-                <FaArrowRight className="ml-2 h-4 w-4" />
-              </a>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-6 p-6 rounded-xl bg-slate-50 dark:bg-slate-700/30">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white font-semibold">
-              3
-            </div>
-            <div>
-              <h3 className="font-medium text-lg text-slate-900 dark:text-white mb-2">
-                Chat With Your Project Documents
-              </h3>
-              <p className="text-slate-600 dark:text-slate-300">
-                Start a conversation related to a project. Ask questions in
-                natural language and get accurate answers based on the project's
-                documents.
-              </p>
-              <a
-                href="/dashboard/chat/new"
-                className="mt-4 inline-flex items-center text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-sm font-medium"
-              >
-                Start chatting
-                <FaArrowRight className="ml-2 h-4 w-4" />
-              </a>
-            </div>
-          </div>
-        </div>
+        </Link>
       </div>
     </div>
   );

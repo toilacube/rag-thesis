@@ -88,7 +88,7 @@ const ApiKeyInput = () => {
                     <h4 className="text-sm font-medium text-slate-700 mb-2">
                       Method
                     </h4>
-                    <code className="block p-3 bg-white border rounded-md text-sm font-mono text-blue-600">
+                    <code className="block p-3 bg-white border rounded-md text-sm font-mono text-gray-600">
                       GET
                     </code>
                   </div>
@@ -108,13 +108,13 @@ const ApiKeyInput = () => {
                     </h4>
                     <div className="bg-white border rounded-md p-3 space-y-2">
                       <div className="grid grid-cols-3 text-sm">
-                        <div className="font-mono text-blue-600">query</div>
+                        <div className="font-mono text-gray-600">query</div>
                         <div className="col-span-2">
                           Your search query string
                         </div>
                       </div>
                       <div className="grid grid-cols-3 text-sm">
-                        <div className="font-mono text-blue-600">top_k</div>
+                        <div className="font-mono text-gray-600">top_k</div>
                         <div className="col-span-2">
                           Number of results to return (optional, default: 3)
                         </div>
@@ -127,7 +127,7 @@ const ApiKeyInput = () => {
                       Headers
                     </h4>
                     <div className="bg-white border rounded-md p-3 grid grid-cols-3 text-sm">
-                      <div className="font-mono text-blue-600">X-API-Key</div>
+                      <div className="font-mono text-gray-600">X-API-Key</div>
                       <div className="col-span-2">your_api_key</div>
                     </div>
                   </div>

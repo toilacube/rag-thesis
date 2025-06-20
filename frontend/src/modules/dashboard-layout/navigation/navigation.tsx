@@ -20,7 +20,7 @@ const Navigation = () => {
             }`}
           >
             <item.icon
-              className={`mr-3 h-5 w-5 transition-transform duration-200 ${
+              className={`mr-3 h-5 w-5 transition-transform duration-200 text-gray-600 ${
                 isActive ? "text-primary scale-110" : "group-hover:scale-110"
               }`}
             />
