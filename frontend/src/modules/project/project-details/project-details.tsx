@@ -6,8 +6,10 @@ import { useToast } from "@/components/use-toast";
 import Link from "next/link";
 import { FiSettings, FiSearch, FiTrash2, FiArrowRight } from "react-icons/fi";
 import { deleteProject } from "./utils/delete-project";
+import { useRouter } from "next/navigation";
 
 const ProjectDetails = () => {
+  const router = useRouter();
   const { projects, setProjects, selectedProject, setSelectedProject } =
     useProject();
   const { toast } = useToast();
@@ -42,7 +44,6 @@ const ProjectDetails = () => {
           className={`rounded-lg border bg-card p-6 space-y-4 ${
             selectedProject?.id === project.id ? "ring-2 ring-primary" : ""
           }`}
-          onClick={() => setSelectedProject(project)}
         >
           <div className="flex justify-between items-start">
             <div>
@@ -57,12 +58,15 @@ const ProjectDetails = () => {
             </div>
 
             <div className="flex space-x-2">
-              <Link
-                href={`/dashboard/project/${project.id}`}
-                className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
+              <div
+                className="inline-flex cursor-pointer items-center justify-center rounded-md bg-secondary w-8 h-8"
+                onClick={() => {
+                  setSelectedProject(project);
+                  router.push(`/dashboard/project/${project.id}`);
+                }}
               >
                 <FiSettings className="h-4 w-4" />
-              </Link>
+              </div>
               <Link
                 href={`/dashboard/project/${project.id}`}
                 className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
