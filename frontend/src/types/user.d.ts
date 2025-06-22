@@ -15,6 +15,7 @@ type UserResponse = {
   roles?: string[];
   autoAssignedRoles?: string[];
   trueSelected?: string[];
+  isNew?: boolean;
 };
 
 type AssignedUserResponse = {
