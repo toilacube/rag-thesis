@@ -5,7 +5,7 @@ from pydantic import EmailStr
 
 from app.core.api_reponse import api_response
 from app.models.models import User, ProjectPermission, Permission, Project
-from app.dtos.userDTO import UserPermissionDTO, UserProjectPermissionResponse, AddUserToProjectRequest
+from app.dtos.userDTO import UserPermissionDTO, UserProjectPermissionResponse, AddUserToProjectRequest, BatchUserAssignment
 from db.database import get_db_session
 from app.core.security import get_current_user
 from app.services.permission import (
@@ -17,7 +17,7 @@ from app.services.permission import (
 
 router = APIRouter()
 
-@router.post("/project/{project_id}/users", response_model=UserProjectPermissionResponse)
+@router.post("/project/{project_id}/user-assignment", response_model=UserProjectPermissionResponse)
 @require_manage_users_or_superuser()
 async def add_user_to_project(
     project_id: int,
@@ -104,6 +104,67 @@ async def add_user_to_project(
         "permissions": [p[0] for p in project_permissions]
     }
 
+@router.post("/project/{project_id}/users-batch-assignment")
+@require_manage_users_or_superuser()
+async def assign_users_to_project_batch(
+    project_id: int,
+    request: BatchUserAssignment,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project with ID {project_id} not found"
+        )
+
+    responses = []
+
+    for item in request.users:
+        user = db.query(User).filter(User.email == item.email).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User with email {item.email} not found"
+            )
+
+        permissions = db.query(Permission).filter(
+            Permission.name.in_(item.permissions)
+        ).all()
+
+        if len(permissions) != len(item.permissions):
+            found_permission_names = [p.name for p in permissions]
+            missing_permissions = [p for p in item.permissions if p not in found_permission_names]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid permissions for {item.email}: {', '.join(missing_permissions)}"
+            )
+
+        for permission in permissions:
+            exists = db.query(ProjectPermission).filter_by(
+                project_id=project_id,
+                user_id=user.id,
+                permission_id=permission.id
+            ).first()
+
+            if not exists:
+                db.add(ProjectPermission(
+                    project_id=project_id,
+                    user_id=user.id,
+                    permission_id=permission.id
+                ))
+
+        responses.append({
+            "user_id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "permissions": [p.name for p in permissions]
+        })
+
+    db.commit()
+    return {"project_id": project_id, "assigned": responses}
+
 @router.get("/project/{project_id}/users", response_model=List[UserProjectPermissionResponse])
 @require_permission("view_project")
 async def get_project_users(
@@ -128,7 +189,6 @@ async def get_project_users(
             detail=f"Project with ID {project_id} not found"
         )
     
-    # Get all users with permissions for this project
     users_with_permissions = db.query(
         User.id,
         User.email,
@@ -138,7 +198,8 @@ async def get_project_users(
         ProjectPermission,
         ProjectPermission.user_id == User.id
     ).filter(
-        ProjectPermission.project_id == project_id
+        ProjectPermission.project_id == project_id,
+        User.id != current_user.id
     ).distinct().all()
     
     result = []

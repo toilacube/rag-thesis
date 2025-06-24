@@ -101,7 +101,7 @@ const RegisterPage = () => {
                   name="username"
                   type="text"
                   required
-                  className="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
                   placeholder="Enter your username"
                 />
               </div>
@@ -122,7 +122,7 @@ const RegisterPage = () => {
                     validationErrors.email
                       ? "border-red-300"
                       : "border-gray-300"
-                  } shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                  } shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500`}
                   placeholder="Enter your email"
                   onChange={(e) => validateEmail(e.target.value)}
                 />
@@ -149,7 +149,7 @@ const RegisterPage = () => {
                     validationErrors.password
                       ? "border-red-300"
                       : "border-gray-300"
-                  } shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                  } shadow-sm focus:ring-2 focus:ring-gray-500 focus:border-gray-500`}
                   placeholder="Create a password"
                   onChange={(e) => validatePassword(e.target.value)}
                 />

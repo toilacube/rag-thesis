@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func
+from typing import List, Optional
 
 from app.dtos.projectDTO import CreateProjectRequest, ProjectResponse, UpdateProjectRequest
+from app.dtos.userDTO import UserResponse
 from app.models.models import Project, ProjectPermission
 from db.database import get_db_session
 from app.core.security import get_current_user
@@ -106,3 +108,29 @@ def get_projects_for_current_user(
         .all()
     
     return user_projects
+
+@router.get("/{project_id}/unassigned-users", response_model=List[UserResponse])
+def get_unassigned_users_for_project(
+    project_id: int,
+    q: Optional[str] = Query(None, description="Search string in email"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get users who are active and NOT assigned to the given project.
+    Can filter by partial email match.
+    """
+    assigned_user_ids = db.query(ProjectPermission.user_id)\
+        .filter(ProjectPermission.project_id == project_id)
+
+    query = db.query(User)\
+        .filter(~User.id.in_(assigned_user_ids))\
+        .filter(
+            User.is_active == True, 
+            User.id != current_user.id
+        )
+
+    if q:
+        query = query.filter(func.lower(User.email).ilike(f"%{q.lower()}%"))
+
+    return query.all()

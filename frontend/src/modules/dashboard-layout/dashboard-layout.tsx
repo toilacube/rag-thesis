@@ -8,7 +8,7 @@ const DashboardLayout = async ({ children }: { children: React.ReactNode }) => {
   const projects: Project[] = await getProjects(); // Fetch projects
 
   return (
-    <ProjectProvider initialProjects={projects}> {/* Pass projects to provider */}
+    <ProjectProvider initialProjects={projects}>
       <div className="min-h-screen bg-background">
         <Menu />
         <div className="lg:pl-64">

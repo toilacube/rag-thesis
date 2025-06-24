@@ -38,3 +38,6 @@ class UserProjectPermissionResponse(BaseModel):
     username: str
     project_id: int
     permissions: List[str]
+
+class BatchUserAssignment(BaseModel):
+    users: List[AddUserToProjectRequest]

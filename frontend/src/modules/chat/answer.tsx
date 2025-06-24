@@ -111,7 +111,7 @@ export const Answer: FC<{
     () =>
       (
         props: ClassAttributes<HTMLAnchorElement> &
-          AnchorHTMLAttributes<HTMLAnchorElement>,
+          AnchorHTMLAttributes<HTMLAnchorElement>
       ) => {
         if (!citations || citations.length === 0) {
           // If no citations, render as a normal link or placeholder
@@ -152,8 +152,10 @@ export const Answer: FC<{
                 {...props}
                 href="#" // Prevent navigation
                 role="button"
-                className="inline-flex items-center gap-0.5 px-1 py-0 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors relative"
-                title={`Citation ${citationIndex + 1}: ${citation.text.substring(0, 50)}...`}
+                className="inline-flex items-center gap-0.5 px-1 py-0 text-xs font-medium text-gray-600 bg-gray-50 rounded hover:bg-gray-100 transition-colors relative"
+                title={`Citation ${
+                  citationIndex + 1
+                }: ${citation.text.substring(0, 50)}...`}
               >
                 [{citationIndex + 1}]
               </a>
@@ -210,7 +212,7 @@ export const Answer: FC<{
           </Popover>
         );
       },
-    [citations, citationInfoMap],
+    [citations, citationInfoMap]
   );
 
   // Markdown parsing for citations: [Citation:1] or [[Citation:1]] -> [citation](1)
