@@ -22,6 +22,7 @@ from app.services.rabbitmq import RabbitMQService # For type hinting, actual ins
 from markitdown import MarkItDown # Assuming this is the correct import
 from app.llm_providers.prompt_factory import ChatPromptFactory # Added for Markdown conversion
 from app.llm_providers.llm_factory import LLMFactory # Added for LLM client
+from app.llm_providers.utils import clean_markdown_response # Added for cleaning LLM responses
 
 # Configure logging for the consumer
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -245,7 +246,9 @@ async def process_message_callback(ch, method, properties, body, qdrant_service_
                     try:
                         response = await client.chat.completions.create(**completion_kwargs)
                         if response and response.choices and response.choices[0].message and response.choices[0].message.content:
-                            processed_chunks.append(response.choices[0].message.content)
+                            raw_content = response.choices[0].message.content
+                            cleaned_content = clean_markdown_response(raw_content)
+                            processed_chunks.append(cleaned_content)
                             logger.info(f"LLM successfully processed chunk {chunk_index + 1} for {doc_upload.file_name}.")
                         else:
                             logger.warning(f"LLM failed to process chunk {chunk_index + 1} for {doc_upload.file_name} or returned empty. Skipping this chunk.")

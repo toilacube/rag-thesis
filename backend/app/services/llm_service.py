@@ -8,6 +8,7 @@ from openai.types.chat import ChatCompletionChunk # For type hinting
 
 from app.config.config import Config, getConfig
 from app.llm_providers.llm_factory import LLMFactory
+from app.llm_providers.utils import extract_json_from_response
 from fastapi import Depends
 
 logger = logging.getLogger(__name__)
@@ -127,21 +128,20 @@ class LLMService:
             content = completion.choices[0].message.content
             
             if content:
-                json_str = content.strip()
-                if json_str.startswith("```json"):
-                    json_str = json_str[len("```json"):].strip()
-                if json_str.endswith("```"):
-                    json_str = json_str[:-len("```")].strip()
+                json_str = extract_json_from_response(content)
                 
-                try:
-                    decision = json.loads(json_str)
-                    if "need_rag" in decision and isinstance(decision["need_rag"], bool):
-                        logger.info(f"RAG decision: {decision}")
-                        return decision
-                    else:
-                        logger.error(f"LLM RAG decision response missing 'need_rag' boolean or invalid format: {content}")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse RAG decision JSON from LLM: {e}. Content: {content}")
+                if json_str:
+                    try:
+                        decision = json.loads(json_str)
+                        if "need_rag" in decision and isinstance(decision["need_rag"], bool):
+                            logger.info(f"RAG decision: {decision}")
+                            return decision
+                        else:
+                            logger.error(f"LLM RAG decision response missing 'need_rag' boolean or invalid format: {content}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse RAG decision JSON from LLM: {e}. Content: {content}")
+                else:
+                    logger.error(f"Could not extract JSON from LLM RAG decision response: {content}")
             return None
         except Exception as e:
             logger.error(f"Error getting RAG decision from {selected_provider}: {e}", exc_info=True)

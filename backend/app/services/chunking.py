@@ -139,7 +139,7 @@ def _split_markdown_by_headers(
 
 def chunk_markdown(
     markdown_text: str,
-    split_level: int = 2,
+    split_level: int = 3,
     max_chunk_size: int = 1000,
     chunk_overlap: int = 50,
     source_document: Optional[str] = None # This is document_id as string
