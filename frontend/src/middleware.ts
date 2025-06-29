@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getIsPrivateRoute } from "./utils/regex/routes";
+import { getIsPrivateRoute, getNonLoginRoute } from "./utils/regex/routes";
 import { checkLoggedIn } from "./utils/check-logged-in";
 
 export const middleware = async (request: NextRequest) => {
@@ -8,12 +8,15 @@ export const middleware = async (request: NextRequest) => {
   const { pathname } = request.nextUrl;
 
   const isPrivateRoute = getIsPrivateRoute(pathname);
+  const isAuthRoute = getNonLoginRoute(pathname);
 
-  if (isPrivateRoute && token) {
+  if (token) {
     const isLoggedIn = await checkLoggedIn(token);
-    if (!isLoggedIn) {
-      const loginUrl = new URL("/login", request.url);
-      return NextResponse.redirect(loginUrl);
+    if (!isLoggedIn && isPrivateRoute) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+    if (isLoggedIn && isAuthRoute) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
@@ -21,5 +24,5 @@ export const middleware = async (request: NextRequest) => {
 };
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/login", "/register"],
 };

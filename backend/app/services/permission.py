@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Permission, ProjectPermission, User
 from db.database import get_db_session
+from typing import Union
 
 
 class PermissionService:
@@ -70,12 +71,12 @@ def getPermissionService(db: Session = Depends(get_db_session)):
     return PermissionService(db)
 
 
-def require_permission(permission_name: str, project_id_param: str = "project_id"):
+def require_permission(permission_name: Union[str, list[str]], project_id_param: str = "project_id"):
     """
-    Decorator to check if a user has the required permission for a project
+    Decorator to check if a user has one of the required permissions for a project.
     
     Args:
-        permission_name: The permission name required (e.g., 'add_document')
+        permission_name: A permission name or list of permission names (e.g., 'add_document' or ['add', 'edit'])
         project_id_param: The parameter name that contains the project ID in the endpoint
     """
     def decorator(func):
@@ -84,65 +85,51 @@ def require_permission(permission_name: str, project_id_param: str = "project_id
             # Get database and service
             db = next(get_db_session())
             permission_service = PermissionService(db)
-            
-            # Extract project_id from kwargs or find in args
+
+            # Extract project_id
             project_id = kwargs.get(project_id_param)
             if project_id is None:
-                # Look for project_id in the positional arguments by matching parameter name
                 sig = inspect.signature(func)
                 param_names = list(sig.parameters.keys())
                 if project_id_param in param_names and len(args) > param_names.index(project_id_param):
                     project_id = args[param_names.index(project_id_param)]
-            
-            # Similarly extract current_user or find in args
+
+            # Extract current_user
             current_user = kwargs.get("current_user")
             if current_user is None:
-                # Look for a User object in args
                 for arg in args:
                     if isinstance(arg, User):
                         current_user = arg
                         break
-                        
-                # If still not found, check positional arguments by parameter name
                 if current_user is None and "current_user" in inspect.signature(func).parameters:
                     param_names = list(sig.parameters.keys())
-                    current_user_index = param_names.index("current_user") if "current_user" in param_names else -1
-                    if current_user_index >= 0 and len(args) > current_user_index:
+                    current_user_index = param_names.index("current_user")
+                    if len(args) > current_user_index:
                         current_user = args[current_user_index]
-            
-            # Validate required parameters
+
             if not project_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Missing {project_id_param} parameter"
-                )
-            
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Missing {project_id_param}")
             if not current_user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
-                )
-            print (f"Current user: {current_user}")
-            # Allow superusers to bypass permission check
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
             if current_user.is_superuser:
                 return await func(*args, **kwargs)
-            
-            # Check permission for regular users
-            if not permission_service.check_permission(
-                user_id=current_user.id,
-                project_id=project_id,
-                required_permission=permission_name
+
+            # Convert to list if single string
+            required_permissions = permission_name if isinstance(permission_name, list) else [permission_name]
+
+            if not any(
+                permission_service.check_permission(current_user.id, project_id, perm)
+                for perm in required_permissions
             ):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"User does not have '{permission_name}' permission for this project"
+                    detail=f"User lacks required permissions: {required_permissions}"
                 )
-            
-            # Permission check passed, call the original function
+
             return await func(*args, **kwargs)
-        
+
         return wrapper
-    
     return decorator
 
 

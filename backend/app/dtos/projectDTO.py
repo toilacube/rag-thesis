@@ -13,6 +13,8 @@ class UpdateProjectRequest(ProjectBase):
 
 class ProjectResponse(ProjectBase):
     id: int
+    user_id: int
+    permission_id: int
 
     class Config:
         orm_mode = True

@@ -4,16 +4,23 @@ import { ApiError } from "@/lib/api";
 import { useProject } from "@/contexts/project-provider";
 import { useToast } from "@/components/use-toast";
 import Link from "next/link";
-import { FiSettings, FiSearch, FiTrash2, FiArrowRight } from "react-icons/fi";
+import { FiTrash2, FiArrowRight } from "react-icons/fi";
 import { deleteProject } from "./utils/delete-project";
 import { useRouter } from "next/navigation";
+import { checkPermissionName } from "@/utils/check-permission-name";
 
 const ProjectDetails = () => {
   const router = useRouter();
-  const { projects, setProjects, selectedProject, setSelectedProject } =
-    useProject();
+  const {
+    projects,
+    setProjects,
+    selectedProject,
+    setSelectedProject,
+    permissionMap,
+  } = useProject();
   const { toast } = useToast();
   console.log("toilacube:", projects);
+  console.log("permissionMap", permissionMap);
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this project?")) return;
 
@@ -41,9 +48,13 @@ const ProjectDetails = () => {
       {projects.map((project) => (
         <div
           key={project.id}
-          className={`rounded-lg border bg-card p-6 space-y-4 ${
+          className={`rounded-lg border bg-card p-6 space-y-4 cursor-pointer ${
             selectedProject?.id === project.id ? "ring-2 ring-primary" : ""
           }`}
+          onClick={() => {
+            setSelectedProject(project);
+            router.push(`/dashboard/project/${project.id}`);
+          }}
         >
           <div className="flex justify-between items-start">
             <div>
@@ -57,39 +68,29 @@ const ProjectDetails = () => {
               </p>
             </div>
 
-            <div className="flex space-x-2">
-              <div
-                className="inline-flex cursor-pointer items-center justify-center rounded-md bg-secondary w-8 h-8"
-                onClick={() => {
-                  setSelectedProject(project);
-                  router.push(`/dashboard/project/${project.id}`);
-                }}
-              >
-                <FiSettings className="h-4 w-4" />
-              </div>
-              <Link
-                href={`/dashboard/project/${project.id}`}
-                className="inline-flex items-center justify-center rounded-md bg-secondary w-8 h-8"
-              >
-                <FiSearch className="h-4 w-4" />
-              </Link>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(project.id);
-                }}
-                className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
-              >
-                <FiTrash2 className="h-4 w-4 text-destructive" />
-              </button>
-            </div>
+            {project?.permission_ids?.length &&
+              checkPermissionName(
+                project.permission_ids,
+                "delete_project",
+                permissionMap
+              ) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(project.id);
+                  }}
+                  className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
+                >
+                  <FiTrash2 className="h-4 w-4 text-destructive" />
+                </button>
+              )}
           </div>
 
           {(project.documents_count ?? 0) > 0 && (
             <div className="border-t pt-4">
               <h4 className="text-sm font-medium mb-2">Documents</h4>
               <Link
-                href={`/dashboard/project/${project.id}`}
+                href={`/dashboard/project`}
                 className="inline-flex items-center text-sm text-primary hover:underline"
               >
                 View all documents

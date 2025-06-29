@@ -21,12 +21,17 @@ import {
   FiHelpCircle,
   FiDownload,
   FiEye,
+  FiTrash2,
 } from "react-icons/fi"; // Added icons
 // import { api, ApiError } from "@/lib/api"; // No longer using client-side api for these
 import { ApiError } from "@/lib/api"; // Keep for error instance checking if needed, or remove if server actions handle errors fully
 import { getDocumentList } from "./utils/get-document-list";
 import { downloadDocumentAction } from "./utils/download-document";
 import { previewDocumentAction } from "./utils/preview-document";
+import { useProject } from "@/contexts/project-provider";
+import { useToast } from "@/components/use-toast";
+import RemoveConfirmation from "./remove-confirmation";
+import { checkPermissionName } from "@/utils/check-permission-name";
 
 // --- START: TypeScript Interfaces (can be moved to a types file) ---
 export interface DocumentWithStatus {
@@ -56,6 +61,9 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
   const [loading, setLoading] = useState(true);
   const [previewMarkdown, setPreviewMarkdown] = useState<string | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
+  const { selectedProject, permissionMap } = useProject();
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchDocuments = async () => {
@@ -66,11 +74,6 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
         setError(null);
       } catch (error) {
         console.error("Failed to fetch documents:", error);
-        if (error instanceof ApiError) {
-          setError(error.message);
-        } else {
-          setError("Failed to fetch documents. Please try again later.");
-        }
       } finally {
         setLoading(false);
       }
@@ -141,6 +144,25 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
       alert(`Preview error: ${errorMessage}`);
       setPreviewMarkdown(null);
       setShowPreviewModal(false);
+    }
+  };
+
+  const handleDelete = async (id: number | null) => {
+    try {
+      toast({
+        title: "Success",
+        description: `Document deleted successfully (ID: ${id})`,
+      });
+      setDocuments(documents.filter((document) => document.id !== id));
+    } catch (error) {
+      console.error("Failed to delete document:", error);
+      if (error instanceof ApiError) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -229,8 +251,7 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
             <TableHead>Uploaded/Created</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Details</TableHead>
-            <TableHead className="text-center">Download</TableHead>
-            <TableHead className="text-center">Preview</TableHead>
+            <TableHead className="text-center">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -287,30 +308,69 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
                 )}
               </TableCell>
               <TableCell className="text-center">
-                <button
-                  onClick={() => handleDownload(doc)}
-                  title="Download document"
-                  className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
-                  disabled={!doc.id || doc.processing_status !== "completed"}
-                >
-                  <FiDownload size={18} />
-                </button>
-              </TableCell>
-              <TableCell className="text-center">
-                <button
-                  onClick={() => handlePreview(doc)}
-                  title="Preview document"
-                  className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
-                  disabled={!doc.id || doc.processing_status !== "completed"}
-                >
-                  <FiEye size={18} />
-                </button>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => handleDownload(doc)}
+                    title="Download document"
+                    className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                    disabled={
+                      !doc.id ||
+                      doc.processing_status !== "completed" ||
+                      !checkPermissionName(
+                        selectedProject?.permission_ids || [],
+                        "view_document",
+                        permissionMap
+                      )
+                    }
+                  >
+                    <FiDownload size={18} />
+                  </button>
+                  <button
+                    onClick={() => handlePreview(doc)}
+                    title="Preview document"
+                    className="text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                    disabled={
+                      !doc.id ||
+                      doc.processing_status !== "completed" ||
+                      !checkPermissionName(
+                        selectedProject?.permission_ids || [],
+                        "view_document",
+                        permissionMap
+                      )
+                    }
+                  >
+                    <FiEye size={18} />
+                  </button>
+                  <button
+                    onClick={() => setSelectedDocId(doc.id)}
+                    title="Remove document"
+                    className="text-gray-500 hover:text-red-700 disabled:opacity-50 cursor-pointer"
+                    disabled={
+                      !doc.id ||
+                      doc.processing_status !== "completed" ||
+                      !checkPermissionName(
+                        selectedProject?.permission_ids || [],
+                        "delete_document",
+                        permissionMap
+                      )
+                    }
+                  >
+                    <FiTrash2 size={18} />
+                  </button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
 
+      {selectedDocId && (
+        <RemoveConfirmation
+          id={selectedDocId}
+          setId={setSelectedDocId}
+          handleRemove={handleDelete}
+        />
+      )}
       {showPreviewModal && previewMarkdown && (
         <div
           style={{

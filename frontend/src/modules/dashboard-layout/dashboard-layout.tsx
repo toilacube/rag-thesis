@@ -2,13 +2,17 @@ import Breadcrumb from "@/components/breadcrumb";
 import { ProjectProvider } from "@/contexts/project-provider";
 import Menu from "./menu";
 import { getProjects } from "@/utils/get-projects"; // Import getProjects
-import { Project } from "@/contexts/project-provider"; // Import Project type
+import { getPermissions } from "@/utils/get-permissions";
 
 const DashboardLayout = async ({ children }: { children: React.ReactNode }) => {
-  const projects: Project[] = await getProjects(); // Fetch projects
+  const projects: Project[] = await getProjects();
+  const permissions: Permission[] = await getPermissions();
 
   return (
-    <ProjectProvider initialProjects={projects}>
+    <ProjectProvider
+      initialProjects={projects}
+      initialPermissions={permissions}
+    >
       <div className="min-h-screen bg-background">
         <Menu />
         <div className="lg:pl-64">

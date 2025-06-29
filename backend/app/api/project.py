@@ -88,26 +88,49 @@ def delete_project(project_id: int, db: Session = Depends(get_db_session)):
     return {"message": "Project deleted successfully", "project_id": project_id}
 
 # Get all projects for the current user
-@router.get("/user/me", response_model=List[ProjectResponse])
+@router.get("/user/me")
 def get_projects_for_current_user(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Retrieve all projects for the currently authenticated user.
-    Superusers can view all projects in the system.
-    """
-    # If user is a superuser, return all projects
     if current_user.is_superuser:
-        return db.query(Project).all()
-    
-    # Otherwise, get only projects that the user has permission for
-    user_projects = db.query(Project)\
-        .join(ProjectPermission, Project.id == ProjectPermission.project_id)\
-        .filter(ProjectPermission.user_id == current_user.id)\
-        .all()
-    
-    return user_projects
+        projects_raw = db.query(
+            Project.id,
+            Project.project_name,
+            Project.description,
+            db.literal(None).label("user_id"),
+            db.literal(None).label("permission_id")
+        ).all()
+    else:
+        projects_raw = db.query(
+            Project.id,
+            Project.project_name,
+            Project.description,
+            ProjectPermission.user_id.label("user_id"),
+            ProjectPermission.permission_id.label("permission_id")
+        ).join(
+            ProjectPermission, Project.id == ProjectPermission.project_id
+        ).filter(
+            ProjectPermission.user_id == current_user.id
+        ).all()
+
+    # Group by project_id
+    grouped = {}
+    for row in projects_raw:
+        project_id = row.id
+        if project_id not in grouped:
+            grouped[project_id] = {
+                "id": project_id,
+                "project_name": row.project_name,
+                "description": row.description,
+                "user_id": row.user_id,
+                "permission_ids": [],
+            }
+        if row.permission_id is not None and row.permission_id not in grouped[project_id]["permission_ids"]:
+            grouped[project_id]["permission_ids"].append(row.permission_id)
+
+    return list(grouped.values())
+
 
 @router.get("/{project_id}/unassigned-users", response_model=List[UserResponse])
 def get_unassigned_users_for_project(

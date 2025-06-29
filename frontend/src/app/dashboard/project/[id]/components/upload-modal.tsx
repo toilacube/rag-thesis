@@ -11,6 +11,8 @@ import {
 import { FiPlus } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import { DocumentUploadSteps } from "@/modules/document-upload-steps";
+import { checkPermissionName } from "@/utils/check-permission-name";
+import { useProject } from "@/contexts/project-provider";
 
 type UploadModalProps = {
   dialogOpen: boolean;
@@ -27,14 +29,21 @@ const UploadModal = ({
   currentProject,
   handleUploadComplete,
 }: UploadModalProps) => {
+  const { selectedProject, permissionMap } = useProject();
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <FiPlus className="w-4 h-4 mr-2" />
-          Add Documents
-        </Button>
-      </DialogTrigger>
+      {checkPermissionName(
+        selectedProject?.permission_ids || [],
+        "add_document",
+        permissionMap
+      ) && (
+        <DialogTrigger asChild>
+          <Button>
+            <FiPlus className="w-4 h-4 mr-2" />
+            Add Documents
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-4xl min-h-[60vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add Documents to Knowledge Base</DialogTitle>

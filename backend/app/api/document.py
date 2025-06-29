@@ -264,7 +264,7 @@ async def get_documents_by_project(
     summary="Get documents by project ID with their processing status",
     description="Retrieve all document uploads for a project, showing their current processing status and links to processed documents if available."
 )
-@require_permission("view_project", project_id_param="project_id")
+@require_permission(["view_project", "edit_project", "edit_document", "delete_document", "admin"], project_id_param="project_id")
 async def get_documents_with_status_by_project(
     project_id: int,
     current_user: User = Depends(get_current_user),
