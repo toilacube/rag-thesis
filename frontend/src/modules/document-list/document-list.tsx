@@ -30,8 +30,8 @@ import { downloadDocumentAction } from "./utils/download-document";
 import { previewDocumentAction } from "./utils/preview-document";
 import { useProject } from "@/contexts/project-provider";
 import { useToast } from "@/components/use-toast";
-import RemoveConfirmation from "./remove-confirmation";
 import { checkPermissionName } from "@/utils/check-permission-name";
+import RemoveConfirmation from "@/components/ui/remove-confirmation";
 
 // --- START: TypeScript Interfaces (can be moved to a types file) ---
 export interface DocumentWithStatus {

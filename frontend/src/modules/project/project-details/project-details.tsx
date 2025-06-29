@@ -8,6 +8,8 @@ import { FiTrash2, FiArrowRight } from "react-icons/fi";
 import { deleteProject } from "./utils/delete-project";
 import { useRouter } from "next/navigation";
 import { checkPermissionName } from "@/utils/check-permission-name";
+import RemoveConfirmation from "@/components/ui/remove-confirmation";
+import { useState } from "react";
 
 const ProjectDetails = () => {
   const router = useRouter();
@@ -19,11 +21,11 @@ const ProjectDetails = () => {
     permissionMap,
   } = useProject();
   const { toast } = useToast();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   console.log("toilacube:", projects);
   console.log("permissionMap", permissionMap);
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this project?")) return;
 
+  const handleDelete = async (id: number) => {
     try {
       const response = await deleteProject(id);
       toast({
@@ -77,7 +79,7 @@ const ProjectDetails = () => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDelete(project.id);
+                    setSelectedId(project.id);
                   }}
                   className="inline-flex items-center justify-center rounded-md bg-destructive/10 hover:bg-destructive/20 w-8 h-8"
                 >
@@ -107,6 +109,14 @@ const ProjectDetails = () => {
             No projects found. Create one to get started.
           </p>
         </div>
+      )}
+
+      {selectedId && (
+        <RemoveConfirmation
+          id={selectedId}
+          setId={setSelectedId}
+          handleRemove={handleDelete}
+        />
       )}
     </div>
   );

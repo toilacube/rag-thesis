@@ -19,6 +19,7 @@ const NewProjectForm = () => {
     const formData = new FormData(e.currentTarget);
 
     const { success, project, message } = await createProject(formData);
+    project.permission_ids = [8];
     if (success) {
       setProjects([...projects, project]);
       router.push("/dashboard/project");

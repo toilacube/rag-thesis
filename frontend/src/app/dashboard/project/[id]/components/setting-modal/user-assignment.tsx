@@ -1,53 +1,32 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { FiSearch } from "react-icons/fi";
+import { useState, useEffect } from "react";
 import { useProject } from "@/contexts/project-provider";
-import { getUnassignedUsers } from "../../utils/get-unassigned-users";
-import { getAssignedUsers } from "../../utils/get-assigned-users";
-import { assignUsers } from "../../utils/assign-users";
 import { useToast } from "@/components/use-toast";
+import { getUnassignedUsers } from "../../utils/get-unassigned-users";
+import { assignUsers } from "../../utils/assign-users";
 import { removeUserFromProject } from "../../utils/remove-user";
 import {
   computeAutoAssignedMap,
   removeSelectionAndUpdate,
   resolveFullPermissions,
 } from "../../utils/permission-dependencies";
-import RemoveConfirmation from "./remove-confirmation";
-import PermisstionList from "./permission-list";
+import AddUsersTab from "./add-users-tab";
+import AssignedUsersTab from "./assigned-users-tab";
 
 export default function UserAssignment() {
   const { selectedProject } = useProject();
   const { toast } = useToast();
 
+  const [activeTab, setActiveTab] = useState<"assigned" | "search">("assigned");
+
   const [inputValue, setInputValue] = useState("");
   const [debouncedValue, setDebouncedValue] = useState("");
   const [options, setOptions] = useState<UserResponse[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<UserResponse[]>([]);
-  const [confirmUser, setConfirmUser] = useState<UserResponse | null>(null);
+  const [assignedUsers, setAssignedUsers] = useState<UserResponse[]>([]);
+  const [id, setId] = useState<number | null>(null);
 
-  useEffect(() => {
-    const fetchAssignedUsers = async () => {
-      if (!selectedProject?.id) return;
-      try {
-        const data = await getAssignedUsers(selectedProject.id);
-        const mapped = data.map((user: AssignedUserResponse) => ({
-          id: user.user_id,
-          email: user.email,
-          username: user.username,
-          roles: [...(user.permissions || [])],
-        }));
-        console.log("fetchAssignedUsers", mapped);
-        setSelectedUsers(mapped);
-      } catch (error) {
-        console.error("Error loading assigned users", error);
-      }
-    };
-
-    fetchAssignedUsers();
-  }, [selectedProject?.id]);
-
-  // Debounce logic
+  // Debounce
   useEffect(() => {
     const timeout = setTimeout(() => {
       setDebouncedValue(inputValue);
@@ -57,7 +36,10 @@ export default function UserAssignment() {
 
   // Fetch unassigned users
   useEffect(() => {
-    if (!debouncedValue || !selectedProject?.id) return;
+    if (!debouncedValue || !selectedProject?.id) {
+      setOptions([]);
+      return;
+    }
 
     const fetchUser = async () => {
       try {
@@ -140,21 +122,17 @@ export default function UserAssignment() {
 
   const handleRemoveConfirmation = (user: UserResponse | null) => {
     if (!user) return;
-    if (user?.isNew) {
-      setSelectedUsers((prev) => prev.filter((u) => u.id !== user?.id));
-      return;
-    }
-    setConfirmUser(user);
+    setSelectedUsers((prev) => prev.filter((u) => u.id !== user?.id));
   };
 
   const handleRemove = async (userId: number) => {
-    const user = selectedUsers.find((u) => u.id === userId);
+    const user = assignedUsers.find((u) => u.id === userId);
     if (!user || !selectedProject?.id) return;
 
     const result = await removeUserFromProject(selectedProject.id, userId);
 
     if (result.success) {
-      setSelectedUsers((prev) => prev.filter((u) => u.id !== userId));
+      setAssignedUsers((prev) => prev.filter((u) => u.id !== userId));
       toast({ title: "Removed!", description: result.message });
     } else {
       toast({
@@ -170,20 +148,21 @@ export default function UserAssignment() {
       alert("Missing project ID");
       return;
     }
-    console.log("selectedUsers", selectedUsers);
 
     try {
       await assignUsers(selectedProject.id, selectedUsers);
+      setAssignedUsers((prev) => [
+        ...prev,
+        ...selectedUsers.map((user) => ({
+          ...user,
+          isNew: false,
+        })),
+      ]);
+      setSelectedUsers([]);
       toast({
         title: "Assigned!",
         description: "Users assigned successfully!",
       });
-      setSelectedUsers((prev) =>
-        prev.map((user) => ({
-          ...user,
-          isNew: false,
-        }))
-      );
     } catch (error) {
       console.error(error);
       toast({
@@ -195,57 +174,53 @@ export default function UserAssignment() {
   };
 
   return (
-    <div className="relative w-full max-w-md h-[400px] bg-white flex flex-col">
-      {/* Sticky Header */}
-      <div className="sticky top-0 bg-white z-10 px-4 py-2 border-b">
-        <div className="relative">
-          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search..."
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
-          />
+    <div className="relative w-full max-w-md h-[500px] bg-white flex flex-col">
+      {/* Tab Header */}
+      <div className="sticky top-0 bg-white z-10 px-4 border-b">
+        <div className="flex">
+          <div
+            className={`flex-1 py-2 text-center cursor-pointer ${
+              activeTab === "assigned"
+                ? "border-b-2 border-gray-800 font-semibold"
+                : "text-gray-500"
+            }`}
+            onClick={() => setActiveTab("assigned")}
+          >
+            Assigned Users
+          </div>
+          <div
+            className={`flex-1 py-2 text-center cursor-pointer ${
+              activeTab === "search"
+                ? "border-b-2 border-gray-800 font-semibold"
+                : "text-gray-500"
+            }`}
+            onClick={() => setActiveTab("search")}
+          >
+            Add Users
+          </div>
         </div>
-
-        {/* Dropdown options */}
-        {options.length > 0 && (
-          <ul className="absolute z-20 w-full bg-white shadow-md border rounded mt-1 max-h-60 overflow-y-auto">
-            {options.map((user) => (
-              <li
-                key={user.id}
-                onClick={() => handleSelect(user)}
-                className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-              >
-                {user.email}
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
-      {/* Scrollable content */}
-      <PermisstionList
-        selectedUsers={selectedUsers}
-        handleRemoveConfirmation={handleRemoveConfirmation}
-        handlePermissionChange={handlePermissionChange}
-      />
-
-      {/* Sticky Footer with Submit Button */}
-      <div className="bg-white z-10 px-4 py-2 border-t">
-        <button
-          className="w-full bg-gray-800 text-white py-2 rounded hover:bg-gray-700 transition"
-          onClick={handleAssign}
-        >
-          Assign Users
-        </button>
-      </div>
-      {confirmUser && (
-        <RemoveConfirmation
-          confirmUser={confirmUser}
-          setConfirmUser={setConfirmUser}
+      {activeTab === "assigned" ? (
+        <AssignedUsersTab
+          selectedProjectID={selectedProject?.id}
+          assignedUsers={assignedUsers}
+          setAssignedUsers={setAssignedUsers}
+          handlePermissionChange={handlePermissionChange}
+          id={id}
+          setId={setId}
           handleRemove={handleRemove}
+        />
+      ) : (
+        <AddUsersTab
+          inputValue={inputValue}
+          setInputValue={setInputValue}
+          options={options}
+          selectedUsers={selectedUsers}
+          handlePermissionChange={handlePermissionChange}
+          handleRemoveConfirmation={handleRemoveConfirmation}
+          handleAssign={handleAssign}
+          handleSelect={handleSelect}
         />
       )}
     </div>

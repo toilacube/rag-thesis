@@ -34,7 +34,15 @@ def create_project(
     db.add(project_permission)
     db.commit()
     db.refresh(new_project)
-    return new_project
+
+    return ProjectResponse(
+        id=new_project.id,
+        project_name=new_project.project_name,
+        description=new_project.description,
+        user_id=current_user.id,
+        permission_id=8,
+    )
+
 
 @router.get("", response_model=List[ProjectResponse])
 def get_projects(db: Session = Depends(get_db_session)):
@@ -75,17 +83,17 @@ def update_project(
 
 @router.delete("/{project_id}", status_code=status.HTTP_200_OK)
 def delete_project(project_id: int, db: Session = Depends(get_db_session)):
-    """
-    Delete a project by ID.
-    """
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
-        )
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    db.query(ProjectPermission).filter(ProjectPermission.project_id == project_id).delete()
+    db.commit()
+
     db.delete(project)
     db.commit()
-    return {"message": "Project deleted successfully", "project_id": project_id}
+
+    return {"message": "Project and permissions deleted successfully", "project_id": project_id}
 
 # Get all projects for the current user
 @router.get("/user/me")
@@ -150,6 +158,7 @@ def get_unassigned_users_for_project(
         .filter(~User.id.in_(assigned_user_ids))\
         .filter(
             User.is_active == True, 
+            User.is_superuser == False,
             User.id != current_user.id
         )
 
