@@ -16,7 +16,7 @@ interface Props {
 }
 const RemoveConfirmation = ({ id, setId, handleRemove }: Props) => {
   return (
-    <Dialog open={!!id}>
+    <Dialog open={!!id} onOpenChange={(isOpen) => !isOpen && setId(null)}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Remove</DialogTitle>

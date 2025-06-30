@@ -120,8 +120,7 @@ export default function UserAssignment() {
     );
   };
 
-  const handleRemoveConfirmation = (user: UserResponse | null) => {
-    if (!user) return;
+  const handleRemoveConfirmation = (user: UserResponse) => {
     setSelectedUsers((prev) => prev.filter((u) => u.id !== user?.id));
   };
 
@@ -206,7 +205,6 @@ export default function UserAssignment() {
           selectedProjectID={selectedProject?.id}
           assignedUsers={assignedUsers}
           setAssignedUsers={setAssignedUsers}
-          handlePermissionChange={handlePermissionChange}
           id={id}
           setId={setId}
           handleRemove={handleRemove}

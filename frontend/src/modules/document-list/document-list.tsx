@@ -153,6 +153,7 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
         title: "Success",
         description: `Document deleted successfully (ID: ${id})`,
       });
+      // call api here
       setDocuments(documents.filter((document) => document.id !== id));
     } catch (error) {
       console.error("Failed to delete document:", error);
@@ -347,7 +348,6 @@ const DocumentList = ({ projectId }: DocumentListProps) => {
                     className="text-gray-500 hover:text-red-700 disabled:opacity-50 cursor-pointer"
                     disabled={
                       !doc.id ||
-                      doc.processing_status !== "completed" ||
                       !checkPermissionName(
                         selectedProject?.permission_ids || [],
                         "delete_document",

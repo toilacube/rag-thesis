@@ -13,7 +13,7 @@ interface Props {
     role: string,
     checked: boolean
   ) => void;
-  handleRemoveConfirmation: (user: UserResponse | null) => void;
+  handleRemoveConfirmation: (user: UserResponse) => void;
   handleAssign: () => void;
   handleSelect: (user: UserResponse) => void;
 }
