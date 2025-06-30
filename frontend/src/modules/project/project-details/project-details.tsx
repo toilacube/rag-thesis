@@ -70,7 +70,7 @@ const ProjectDetails = () => {
               </p>
             </div>
 
-            {project?.permission_ids?.length &&
+            {!!project?.permission_ids?.length &&
               checkPermissionName(
                 project.permission_ids,
                 "delete_project",

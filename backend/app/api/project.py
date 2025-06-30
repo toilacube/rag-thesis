@@ -95,7 +95,6 @@ def delete_project(project_id: int, db: Session = Depends(get_db_session)):
 
     return {"message": "Project and permissions deleted successfully", "project_id": project_id}
 
-# Get all projects for the current user
 @router.get("/user/me")
 def get_projects_for_current_user(
     db: Session = Depends(get_db_session),
@@ -106,8 +105,6 @@ def get_projects_for_current_user(
             Project.id,
             Project.project_name,
             Project.description,
-            db.literal(None).label("user_id"),
-            db.literal(None).label("permission_id")
         ).all()
     else:
         projects_raw = db.query(
@@ -122,20 +119,24 @@ def get_projects_for_current_user(
             ProjectPermission.user_id == current_user.id
         ).all()
 
-    # Group by project_id
     grouped = {}
     for row in projects_raw:
         project_id = row.id
         if project_id not in grouped:
+            permission_ids = [8] if current_user.is_superuser else []
+            
             grouped[project_id] = {
                 "id": project_id,
                 "project_name": row.project_name,
                 "description": row.description,
-                "user_id": row.user_id,
-                "permission_ids": [],
+                "user_id": getattr(row, 'user_id', None),
+                "permission_ids": permission_ids,
             }
-        if row.permission_id is not None and row.permission_id not in grouped[project_id]["permission_ids"]:
-            grouped[project_id]["permission_ids"].append(row.permission_id)
+        
+        if not current_user.is_superuser:
+            permission_id = getattr(row, 'permission_id', None)
+            if permission_id is not None and permission_id not in grouped[project_id]["permission_ids"]:
+                grouped[project_id]["permission_ids"].append(permission_id)
 
     return list(grouped.values())
 
