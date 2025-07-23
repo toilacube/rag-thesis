@@ -65,8 +65,7 @@ const ProjectDetails = () => {
                 {project.description || "No description"}
               </p>
               <p className="text-sm text-muted-foreground mt-1">
-                {project.documents_count || 0} documents •{" "}
-                {new Date(project.created_at).toLocaleDateString()}
+                {project.documents_count || 0} documents
               </p>
             </div>
 

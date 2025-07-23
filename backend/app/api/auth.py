@@ -1,5 +1,6 @@
 from exceptiongroup import catch
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi.responses import JSONResponse
 
 from sqlalchemy.orm import Session 
 
@@ -31,13 +32,30 @@ async def login(*, db: Session = Depends(get_db_session), permissionService: Per
     # Generate a JWT token
     access_token = security.createAccessToken(data={"sub": user.email, "scopes": scopes})
 
-    return {
+    # Create response with token in body
+    response_data = {
         "access_token": access_token
     }
+    
+    # Create JSON response and set HTTP cookie
+    response = JSONResponse(content=response_data)
+    response.set_cookie(
+        key=security.ACCESS_TOKEN_COOKIE_NAME,
+        value=access_token,
+        max_age=30 * 24 * 60 * 60,  # 30 days in seconds
+        httponly=True,  # Security: prevent JavaScript access
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax"  # CSRF protection
+    )
+    
+    return response
 
 @router.get("/logout")
 async def logout():
-    raise HTTPException(status_code = 401, detail = "Unauthorized")
+    # Clear the cookie on logout
+    response = JSONResponse(content={"message": "Logged out successfully"})
+    response.delete_cookie(key=security.ACCESS_TOKEN_COOKIE_NAME)
+    return response
 
 @router.post("/register", response_model=UserResponse)
 async def register(*,  db: Session = Depends(get_db_session), userCreate: UserCreate):
