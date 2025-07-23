@@ -28,9 +28,9 @@ pip install -r requirements.txt
 **3. Database setup using Docker**
 
 1. Ensure Docker is installed and running on your system.
-2. Start the database service using the `docker-compose.yml` file:
+2. Start the database service and other services using the `docker-compose.yml` file:
    ```bash
-   docker-compose up -d db
+   docker-compose up -d 
    ```
 3. Verify that the database is running:
    ```bash
@@ -49,15 +49,19 @@ alembic upgrade head
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**6. Run Tests**
-
-To run the tests, use the following command:
+**6. Open another terminal in backend/ and run the upload_file consumer**
 
 ```bash
-pytest tests/
+python run_consumer.py
 ```
 
-This will execute all the test cases in the `tests/` directory and provide a summary of the results.
+**- Health check**
+
+`/health`
+
+```bash
+curl -X GET "http://localhost:8000/api/health"
+```
 
 ## Typical workflow of RAG
 
